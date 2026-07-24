@@ -210,33 +210,46 @@ Splash → Title → (New Game: Region Select → Starter Select) / (Continue: L
 ```
 
 **Implementation status** (`src/screens/`, wired up via `src/navigation/RootNavigator.tsx`): Title,
-Region Select, Starter Select, Home, Map, Battle View, Party, Codex, Bag, and a shared Creature Detail
-screen all exist and are navigable end to end. Region Select is a single-region confirmation screen
-rather than a real choice — Melita's three islands (section 2) are one region, not several to pick
-between; a second region would slot in here later.
+Region Select, Starter Select, Home, Map, Battle View, Party, Codex, Bag, Shop, and a shared Creature
+Detail screen all exist and are navigable end to end. Region Select is a single-region confirmation
+screen rather than a real choice — Melita's three islands (section 2) are one region, not several to
+pick between; a second region would slot in here later.
 
-**Map** (`src/game/mapData.ts`, `src/screens/MapScreen.tsx`) is a hand-authored 7x7 tile grid for
-Melita Woods — not the full 16x16 Tiled-editor grid or node-graph-of-zones the spec describes, just
-one walkable clearing ringed by trees. Movement is a 4-directional D-pad rather than the spec's
-tap-to-pathfind (simpler to build correctly first); the player avatar is a directional glyph, not
-sprite art, per the agreed "stylized placeholders" approach. Walking onto a grass tile has a chance
-to trigger a wild battle drawn from `src/game/encounterTable.ts`'s weighted pool for the zone.
+**Map** (`src/game/mapData.ts`, `src/game/zones.ts`, `src/screens/MapScreen.tsx`) is three
+hand-authored 7x7 tile grids — Melita Woods, Luzzu Harbour, Azure Caverns — chained in a line, each
+with one exit tile leading to the next zone and one entrance (where the player arrives), matching
+the "one exit, one entrance" brief rather than the spec's full node-graph-of-many-zones world.
+Movement is a 4-directional D-pad rather than the spec's tap-to-pathfind (simpler to build correctly
+first); the player avatar is a directional glyph, not sprite art, per the agreed "stylized
+placeholders" approach. Walking onto a grass tile rolls a chance to trigger a wild battle drawn from
+`src/game/encounterTable.ts`'s weighted pool, whose level range is set per zone in `zones.ts` — later
+zones spawn stronger wild creatures.
 
 Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
-action (`src/engine/catching.ts` wired to the Bag's ball items) and randomized wild encounters
-(species and level, drawn from the encounter table above) rather than the same fixed opponent every
-time. Catching adds a real party member (`src/game/party.ts`), which Party, Codex ("seen"/"caught"
-tracking), and Creature Detail (stats, moves, HP) all read from the same `zustand` store
-(`src/state/gameStore.ts`) — there's no separate mock data path for these screens. The Result Screen
-shows win/lose/caught only — no XP bar or level-up flow, since there's no XP/leveling system yet.
-Move Select shows type + name only, no PP (PP isn't modeled in the engine) and no long-press tooltip.
-The Codex/Party stat and move displays surface the same "not recorded yet" gaps flagged in section
-3.1 (stage-1/2 starters have no authored stat block) rather than inventing numbers.
+action (`src/engine/catching.ts` wired to the Bag's ball items), randomized wild encounters, **party
+switching** (voluntary mid-battle via the Party sheet, costing the turn; forced and free when the
+active creature faints and a reserve remains — `BattleStateMachine.replacePlayerActive`), and
+**levels/XP**: starters begin at level 5 (`STARTER_STARTING_LEVEL`), defeating a wild creature grants
+XP and gold (`src/game/progression.ts`), and stats scale with level via `effectiveStats()` rather
+than staying flat. Catching adds a real party member (`src/game/party.ts`), which Party, Codex
+("seen"/"caught" tracking), and Creature Detail (stats, moves, HP, XP-to-next-level) all read from
+the same `zustand` store (`src/state/gameStore.ts`) — no separate mock data path for these screens.
+Each combatant panel shows a generated `CreatureAvatar` (type-colored token, no illustrated art) with
+lunge/hit/faint animations. The Result Screen shows win/lose/caught plus gold and XP earned (and a
+level-up notice) — still no XP *bar* animation or catch-prompt flourish. Move Select shows type +
+name only, no PP (PP isn't modeled in the engine) and no long-press tooltip. The Codex/Party stat and
+move displays surface the same "not recorded yet" gaps flagged in section 3.1 (stage-1/2 starters
+have no authored stat block) rather than inventing numbers.
+
+**Shop** (`src/screens/ShopScreen.tsx`) sells Balls and Medicine for gold (`src/data/items.json`'s
+`price` field); Key Items aren't for sale. Gold is earned from both catching and defeating wild
+creatures (`currencyRewardForLevel`), starting balance 50.
 
 The creature roster (section 3.3) now includes one original wild species, **Fossary** (Bug/Grass,
 `src/data/wildCreatures.json`), and the three regional variants are fully battle-ready with real
 stats and movesets in `src/data/regionalVariants.json` — still a small roster overall (starters +
-Fossary + 3 variants + 3 legendaries), the natural next step being more wild species per zone.
+Fossary + 3 variants + 3 legendaries) shared across all three zones; only the level range shifts by
+zone, not the species pool, since there's no real per-zone spawn table yet.
 
 ### 4.2 Touch Controls
 

@@ -4,9 +4,12 @@ import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
 import { getDexEntry } from "../game/speciesCatalog";
 import { getMove } from "../game/movesRepo";
+import { partyMemberStats } from "../game/party";
+import { xpToNextLevel } from "../game/progression";
 import type { StatBlock } from "../data/schemas";
 import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
+import { CreatureAvatar } from "./components/CreatureAvatar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
@@ -64,9 +67,10 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   }
 
   const name = partyMember?.displayName ?? dexEntry!.name;
+  const speciesId = partyMember?.speciesId ?? dexEntry!.speciesId;
   const types = partyMember?.types ?? dexEntry!.types;
   const level = partyMember?.level ?? null;
-  const stats = partyMember?.stats ?? dexEntry?.stats;
+  const stats = partyMember ? partyMemberStats(partyMember) : dexEntry?.stats;
   const flavor = dexEntry?.flavor;
   const signatureMove = dexEntry?.signatureMove;
   const isCaught = params.source === "species" ? caughtSpeciesIds.includes(params.speciesId) : true;
@@ -74,20 +78,28 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   return (
     <ScreenBackground style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.headerRow}>
-          <Text style={styles.name}>{name}</Text>
-          {level !== null && <Text style={styles.level}>Lv. {level}</Text>}
-        </View>
-        <View style={styles.badgeRow}>
-          {types.map((t) => (
-            <TypeBadge key={t} type={t} />
-          ))}
+        <View style={styles.headerTopRow}>
+          <CreatureAvatar speciesId={speciesId} types={types} size={72} />
+          <View style={styles.headerInfo}>
+            <View style={styles.headerRow}>
+              <Text style={styles.name}>{name}</Text>
+              {level !== null && <Text style={styles.level}>Lv. {level}</Text>}
+            </View>
+            <View style={styles.badgeRow}>
+              {types.map((t) => (
+                <TypeBadge key={t} type={t} />
+              ))}
+            </View>
+          </View>
         </View>
 
         {partyMember && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Condition</Text>
-            <HpBar currentHp={partyMember.currentHp} maxHp={partyMember.stats.hp} />
+            <HpBar currentHp={partyMember.currentHp} maxHp={partyMemberStats(partyMember).hp} />
+            <Text style={styles.xpText}>
+              XP {partyMember.xp} / {xpToNextLevel(partyMember.level)} to Lv. {partyMember.level + 1}
+            </Text>
           </View>
         )}
 
@@ -153,6 +165,15 @@ const styles = StyleSheet.create({
     gap: 18,
     paddingBottom: 12,
   },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  headerInfo: {
+    flex: 1,
+    gap: 6,
+  },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -193,6 +214,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontStyle: "italic",
+  },
+  xpText: {
+    color: colors.textMuted,
+    fontSize: 11,
   },
   statRow: {
     flexDirection: "row",

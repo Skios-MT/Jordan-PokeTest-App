@@ -7,10 +7,11 @@ export type RootStackParamList = {
   RegionSelect: undefined;
   StarterSelect: undefined;
   Home: undefined;
-  Map: undefined;
+  Map: { zoneId: string };
   Battle: undefined;
   Party: undefined;
   Codex: undefined;
   Bag: undefined;
+  Shop: undefined;
   CreatureDetail: CreatureDetailParams;
 };

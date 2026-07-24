@@ -6,7 +6,8 @@
       "category": "balls",
       "description": "The finest craftsmanship on the islands. Catch multiplier 4.0x.",
       "catchMultiplier": 4.0,
-      "startingQuantity": 5
+      "startingQuantity": 5,
+      "price": 200
     },
     {
       "id": "greca_trap",
@@ -14,7 +15,8 @@
       "category": "balls",
       "description": "A woven reed trap in an old Mediterranean pattern. Catch multiplier 1.5x.",
       "catchMultiplier": 1.5,
-      "startingQuantity": 3
+      "startingQuantity": 3,
+      "price": 80
     },
     {
       "id": "festa_trap",
@@ -22,14 +24,16 @@
       "category": "balls",
       "description": "Decorated for the summer festa. Catch multiplier 2.0x.",
       "catchMultiplier": 2.0,
-      "startingQuantity": 1
+      "startingQuantity": 1,
+      "price": 120
     },
     {
       "id": "pastizzi",
       "name": "Pastizzi",
       "category": "medicine",
       "description": "A flaky savoury pastry sold at every ferry stop. Restores stamina — not yet consumable in battle.",
-      "startingQuantity": 3
+      "startingQuantity": 3,
+      "price": 50
     },
     {
       "id": "silent_bell",

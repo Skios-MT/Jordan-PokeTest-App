@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
-import { MELITA_WOODS_MAP, isWalkable, isEncounterTile, type TileType } from "../game/mapData";
+import { useGameStore } from "../state/gameStore";
+import { getMap, isWalkable, isEncounterTile, isExitTile, type TileType } from "../game/mapData";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
@@ -25,11 +26,13 @@ const TILE_COLORS: Record<TileType, string> = {
   tree: "#0b2a1a",
   path: "#4a4030",
   grass: "#1f5c3a",
+  exit: "#7a5c2e",
 };
 
-const map = MELITA_WOODS_MAP;
+export function MapScreen({ navigation, route }: Props) {
+  const map = getMap(route.params.zoneId);
+  const setCurrentZone = useGameStore((s) => s.setCurrentZone);
 
-export function MapScreen({ navigation }: Props) {
   const [position, setPosition] = useState(map.playerStart);
   const [facing, setFacing] = useState<Direction>("down");
   const [message, setMessage] = useState<string | null>(null);
@@ -62,6 +65,15 @@ export function MapScreen({ navigation }: Props) {
       useNativeDriver: false, // animating a plain View position, not a native-driver-eligible property
     }).start(() => {
       setBusy(false);
+
+      if (isExitTile(map, next.row, next.col) && map.exitTo) {
+        setCurrentZone(map.exitTo);
+        // push (not navigate): guarantees a fresh Map instance for the new
+        // zone rather than reusing this one's local position state.
+        navigation.push("Map", { zoneId: map.exitTo });
+        return;
+      }
+
       if (isEncounterTile(map, next.row, next.col) && Math.random() < ENCOUNTER_CHANCE) {
         navigation.navigate("Battle");
       }
@@ -71,7 +83,10 @@ export function MapScreen({ navigation }: Props) {
   return (
     <ScreenBackground style={styles.container}>
       <Text style={styles.title}>{map.zoneName}</Text>
-      <Text style={styles.subtitle}>Walk into the tall grass — wild creatures lurk there.</Text>
+      <Text style={styles.subtitle}>
+        Walk into the tall grass — wild creatures lurk there.
+        {map.exitTo ? " The lit path leads onward." : " This is as far as the path goes for now."}
+      </Text>
 
       <View style={styles.gridWrap}>
         <View style={[styles.grid, { width: map.rows[0].length * TILE_SIZE, height: map.rows.length * TILE_SIZE }]}>
@@ -108,7 +123,7 @@ export function MapScreen({ navigation }: Props) {
         </Pressable>
       </View>
 
-      <PrimaryButton testID="back-button" label="Back to Home" variant="secondary" onPress={() => navigation.goBack()} />
+      <PrimaryButton testID="back-button" label="Back to Home" variant="secondary" onPress={() => navigation.popToTop()} />
     </ScreenBackground>
   );
 }

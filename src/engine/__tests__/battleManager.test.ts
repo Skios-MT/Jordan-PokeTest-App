@@ -185,4 +185,62 @@ describe("BattleStateMachine", () => {
       fsm.submitActions({ kind: "move", actorId: "player", moveId: "splash" }, { kind: "move", actorId: "enemy", moveId: "splash" })
     ).toThrow();
   });
+
+  describe("replacePlayerActive (forced/voluntary switch)", () => {
+    it("un-ends a BATTLE_END caused by the player's own faint when a healthy replacement comes in", () => {
+      const ctx = makeContext({
+        playerActive: makeCreature({ id: "player", types: ["Water"], currentHp: 1, stats: { hp: 1, atk: 1, def: 1, spatk: 1, spdef: 1, speed: 1 } }),
+        enemyActive: makeCreature({ id: "enemy", types: ["Fire"], stats: { hp: 100, atk: 999, def: 1, spatk: 1, spdef: 1, speed: 999 } }),
+      });
+      const fsm = new BattleStateMachine(ctx, getMove, () => 1);
+      fsm.start();
+
+      const winner = fsm.submitActions(
+        { kind: "move", actorId: "player", moveId: "splash" },
+        { kind: "move", actorId: "enemy", moveId: "splash" }
+      );
+      expect(winner).toBe("enemy");
+      expect(fsm.getState()).toBe("BATTLE_END");
+
+      const reserve = makeCreature({ id: "reserve", types: ["Water"] });
+      fsm.replacePlayerActive(reserve);
+
+      expect(fsm.getState()).toBe("ACTION_SELECT");
+      expect(fsm.getContext().playerActive.id).toBe("reserve");
+    });
+
+    it("does not un-end the battle if the replacement itself has no HP", () => {
+      const ctx = makeContext({
+        playerActive: makeCreature({ id: "player", currentHp: 1, stats: { hp: 1, atk: 1, def: 1, spatk: 1, spdef: 1, speed: 1 } }),
+        enemyActive: makeCreature({ id: "enemy", stats: { hp: 100, atk: 999, def: 1, spatk: 1, spdef: 1, speed: 999 } }),
+      });
+      const fsm = new BattleStateMachine(ctx, getMove, () => 1);
+      fsm.start();
+      fsm.submitActions({ kind: "move", actorId: "player", moveId: "splash" }, { kind: "move", actorId: "enemy", moveId: "splash" });
+      expect(fsm.getState()).toBe("BATTLE_END");
+
+      fsm.replacePlayerActive(makeCreature({ id: "fainted-reserve", currentHp: 0 }));
+      expect(fsm.getState()).toBe("BATTLE_END");
+    });
+
+    it("supports a voluntary switch mid-battle via a switch action that costs the turn", () => {
+      const ctx = makeContext();
+      const fsm = new BattleStateMachine(ctx, getMove, () => 1);
+      fsm.start();
+
+      const reserve = makeCreature({ id: "reserve", types: ["Water"] });
+      fsm.replacePlayerActive(reserve);
+      expect(fsm.getState()).toBe("ACTION_SELECT"); // no faint occurred, nothing to un-end
+
+      const enemyHpBefore = fsm.getContext().enemyActive.currentHp;
+      fsm.submitActions(
+        { kind: "switch", actorId: "reserve", targetPartyIndex: 0 },
+        { kind: "move", actorId: "enemy", moveId: "splash" }
+      );
+
+      // The switch itself is a no-op in resolveAction; the enemy's move still lands on the new creature.
+      expect(fsm.getContext().enemyActive.currentHp).toBe(enemyHpBefore);
+      expect(fsm.getContext().playerActive.currentHp).toBeLessThan(reserve.stats.hp);
+    });
+  });
 });

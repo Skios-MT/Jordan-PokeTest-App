@@ -3,18 +3,21 @@ import { StartersFileSchema, type StarterLine, type StatBlock, type TypeName } f
 import type { Creature } from "../engine/types";
 import { NEUTRAL_STAT_STAGES } from "../engine/types";
 import { STARTER_MOVESETS } from "./movesRepo";
+import { effectiveStats } from "./progression";
 
 const starters = StartersFileSchema.parse(startersData).starters;
 
 export type StarterLineName = "Grass" | "Fire" | "Water";
 
-/** Fixed demo level for the vertical slice — no XP/leveling system is wired up yet. */
-export const DEMO_BATTLE_LEVEL = 12;
+/** Every starter begins at this level (spec: "Every Starter begins at level 5"). */
+export const STARTER_STARTING_LEVEL = 5;
 
 export interface BattleParticipant {
   creature: Creature;
   moveIds: string[];
   displayName: string;
+  /** Species reference stats (unscaled) — carried forward so a catch can persist the true base, not the level-scaled numbers. */
+  baseStats: StatBlock;
 }
 
 /** Shared Creature-construction path for anything battle-ready: starters, regional variants, wild species. */
@@ -23,23 +26,24 @@ export function buildParticipant(
   speciesId: string,
   displayName: string,
   types: TypeName[],
-  stats: StatBlock,
+  baseStats: StatBlock,
   level: number,
   moveIds: string[]
 ): BattleParticipant {
+  const stats = effectiveStats(baseStats, level);
   const creature: Creature = {
     id: instanceId,
     speciesId,
     level,
     types,
-    stats: { ...stats },
+    stats,
     statStages: { ...NEUTRAL_STAT_STAGES },
     currentHp: stats.hp,
     status: "none",
     flinched: false,
     activeEffects: [],
   };
-  return { creature, moveIds, displayName };
+  return { creature, moveIds, displayName, baseStats: { ...baseStats } };
 }
 
 function getStarterLine(line: StarterLineName): StarterLine {
@@ -53,8 +57,9 @@ function getStarterLine(line: StarterLineName): StarterLine {
  *
  * Note: starters.json (spec 3.1) only defines stats for the final evolution
  * stage, not stage 1 — there's no per-stage stat block in the source data.
- * As a placeholder pending a real level/stat-growth curve, this reuses the
- * line's baseStatsFinal directly rather than inventing new "canon" numbers.
+ * As a placeholder pending real per-stage numbers, this treats the line's
+ * baseStatsFinal as the species' scaling reference rather than inventing
+ * new "canon" numbers; progression.ts's effectiveStats() scales it by level.
  */
 export function buildStarterParticipant(
   line: StarterLineName,

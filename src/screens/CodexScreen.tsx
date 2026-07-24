@@ -6,6 +6,7 @@ import { useGameStore } from "../state/gameStore";
 import { DEX_ENTRIES } from "../game/speciesCatalog";
 import type { TypeName } from "../data/schemas";
 import { TypeBadge } from "./components/TypeBadge";
+import { CreatureAvatar } from "./components/CreatureAvatar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { colors, typeColor } from "./theme";
@@ -71,6 +72,11 @@ export function CodexScreen({ navigation }: Props) {
               }
               style={({ pressed }) => [styles.cell, pressed && revealed && styles.cellPressed]}
             >
+              {revealed && (
+                <View style={styles.avatarRow}>
+                  <CreatureAvatar speciesId={entry.speciesId} types={entry.types} size={40} />
+                </View>
+              )}
               <Text style={styles.cellName}>{revealed ? entry.name : "???"}</Text>
               {revealed ? (
                 <View style={styles.badgeRow}>
@@ -154,6 +160,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: "700",
+  },
+  avatarRow: {
+    alignItems: "flex-start",
   },
   badgeRow: {
     flexDirection: "row",

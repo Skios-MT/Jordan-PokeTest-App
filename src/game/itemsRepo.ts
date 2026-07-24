@@ -28,6 +28,10 @@ export function defaultStartingInventory(): Record<string, number> {
   return Object.fromEntries(ITEMS.map((item) => [item.id, item.startingQuantity]));
 }
 
+export function purchasableItems(): ItemData[] {
+  return ITEMS.filter((item) => item.price !== undefined);
+}
+
 /** Highest catch-multiplier ball the player currently has at least one of. */
 const BALL_PRIORITY = ["melitan_ball", "festa_trap", "greca_trap"];
 

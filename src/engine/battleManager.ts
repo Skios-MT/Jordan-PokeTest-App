@@ -215,4 +215,28 @@ export class BattleStateMachine {
     }
     return winner;
   }
+
+  /**
+   * Swaps in a party reserve as the player's active combatant. The engine
+   * only ever models two active combatants — it has no concept of a bench —
+   * so bringing in a reserve is this thin hook, called by the trainer-battle
+   * layer that actually owns the party array.
+   *
+   * Two calling patterns:
+   *  - Voluntary mid-battle switch: call this, then still call
+   *    `submitActions` with a `{ kind: "switch" }` player action (a no-op in
+   *    resolveAction) so the enemy's action resolves against the new
+   *    creature and the switch costs the turn, matching genre convention.
+   *  - Forced switch after a faint: call this alone. If the previous active
+   *    creature's faint was the only reason the battle just ended, and the
+   *    replacement has HP and the opponent is still standing, this un-ends
+   *    the battle back to ACTION_SELECT — a forced switch costs no turn.
+   */
+  replacePlayerActive(creature: Creature): void {
+    this.ctx.playerActive = creature;
+    if (this.state === "BATTLE_END" && creature.currentHp > 0 && this.ctx.enemyActive.currentHp > 0) {
+      this.setState("TURN_START");
+      this.setState("ACTION_SELECT");
+    }
+  }
 }

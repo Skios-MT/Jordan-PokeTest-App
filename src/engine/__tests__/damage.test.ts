@@ -13,7 +13,7 @@ describe("damage formula (spec 1.3)", () => {
     const attacker = makeCreature({ level: 1, stats: { hp: 1, atk: 1, def: 1, spatk: 1, spdef: 1, speed: 1 } });
     const defender = makeCreature({ stats: { hp: 999, atk: 999, def: 999, spatk: 999, spdef: 999, speed: 999 } });
     const move = makeMove({ power: 1, type: "Normal" });
-    const dmg = calculateDamage(attacker, defender, move, { randomFactor: 0.85 });
+    const dmg = calculateDamage(attacker, defender, move, { randomFactor: 0.85, isCrit: false });
     expect(dmg).toBeGreaterThanOrEqual(1);
   });
 
@@ -22,9 +22,9 @@ describe("damage formula (spec 1.3)", () => {
     const defender = makeCreature({ types: ["Fighting"] }); // neutral vs Water
     const move = makeMove({ type: "Water", power: 80 });
 
-    const withStab = calculateDamage(attacker, defender, move, { randomFactor: 1 });
+    const withStab = calculateDamage(attacker, defender, move, { randomFactor: 1, isCrit: false });
     const noStabAttacker = makeCreature({ types: ["Fighting"] });
-    const withoutStab = calculateDamage(noStabAttacker, defender, move, { randomFactor: 1 });
+    const withoutStab = calculateDamage(noStabAttacker, defender, move, { randomFactor: 1, isCrit: false });
 
     expect(withStab).toBeGreaterThan(withoutStab);
     expect(withStab).toBe(Math.floor(withoutStab * STAB_MULTIPLIER));
@@ -46,8 +46,8 @@ describe("damage formula (spec 1.3)", () => {
     const neutralDefender = makeCreature({ types: ["Steel"] });
     const weakDefender = makeCreature({ types: ["Fire"] }); // Water is strong vs Fire (spec 1.4)
 
-    const neutral = calculateDamage(attacker, neutralDefender, move, { randomFactor: 1 });
-    const superEffective = calculateDamage(attacker, weakDefender, move, { randomFactor: 1 });
+    const neutral = calculateDamage(attacker, neutralDefender, move, { randomFactor: 1, isCrit: false });
+    const superEffective = calculateDamage(attacker, weakDefender, move, { randomFactor: 1, isCrit: false });
 
     expect(superEffective).toBe(neutral * 2);
   });
@@ -56,7 +56,7 @@ describe("damage formula (spec 1.3)", () => {
     const attacker = makeCreature({ types: ["Poison"] });
     const move = makeMove({ type: "Poison" });
     const immuneDefender = makeCreature({ types: ["Steel"] }); // Steel is immune to Poison (spec 1.4)
-    expect(calculateDamage(attacker, immuneDefender, move, { randomFactor: 1 })).toBe(0);
+    expect(calculateDamage(attacker, immuneDefender, move, { randomFactor: 1, isCrit: false })).toBe(0);
   });
 
   it("applies the Crux Aura multiplier as its own stage without touching STAB/crit", () => {
@@ -64,8 +64,12 @@ describe("damage formula (spec 1.3)", () => {
     const defender = makeCreature({ types: ["Fighting"] });
     const move = makeMove({ type: "Water" });
 
-    const base = calculateDamage(attacker, defender, move, { randomFactor: 1 });
-    const withAura = calculateDamage(attacker, defender, move, { randomFactor: 1, cruxAuraMultiplier: 1.3 });
+    const base = calculateDamage(attacker, defender, move, { randomFactor: 1, isCrit: false });
+    const withAura = calculateDamage(attacker, defender, move, {
+      randomFactor: 1,
+      isCrit: false,
+      cruxAuraMultiplier: 1.3,
+    });
     expect(withAura).toBe(Math.floor(base * 1.3));
   });
 
@@ -74,7 +78,7 @@ describe("damage formula (spec 1.3)", () => {
     const attacker = makeCreature({ level: 7, stats: { hp: 50, atk: 13, def: 50, spatk: 50, spdef: 50, speed: 50 } });
     const defender = makeCreature({ types: ["Fighting"], stats: { hp: 50, atk: 50, def: 17, spatk: 50, spdef: 50, speed: 50 } });
     const move = makeMove({ type: "Water", power: 33 });
-    const dmg = calculateDamage(attacker, defender, move, { randomFactor: 0.91 });
+    const dmg = calculateDamage(attacker, defender, move, { randomFactor: 0.91, isCrit: false });
     expect(Number.isInteger(dmg)).toBe(true);
   });
 });

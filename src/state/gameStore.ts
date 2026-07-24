@@ -1,21 +1,30 @@
 import { create } from "zustand";
-import { buildStarterParticipant, DEMO_BATTLE_LEVEL, type StarterLineName } from "../game/creatureFactory";
-import { partyMemberFromParticipant, type PartyMember } from "../game/party";
+import { buildStarterParticipant, STARTER_STARTING_LEVEL, type StarterLineName } from "../game/creatureFactory";
+import { partyMemberFromParticipant, addExperience, type PartyMember } from "../game/party";
 import { defaultStartingInventory } from "../game/itemsRepo";
 
-const STARTING_ZONE = "Mainland Melita";
+const STARTING_ZONE_ID = "melita_woods";
 const DEFAULT_PLAYER_NAME = "Traveler";
 const MAX_PARTY_SIZE = 6;
+const STARTING_CURRENCY = 50;
+
+export interface ExperienceGainResult {
+  member: PartyMember;
+  leveledUp: boolean;
+  newLevel: number;
+  levelsGained: number;
+}
 
 interface GameState {
   playerName: string;
   selectedLine: StarterLineName | null;
-  currentZone: string;
+  currentZoneId: string;
   battlesWon: number;
   party: PartyMember[];
   seenSpeciesIds: string[];
   caughtSpeciesIds: string[];
   inventory: Record<string, number>;
+  currency: number;
 
   selectStarter: (line: StarterLineName) => void;
   recordBattleResult: (won: boolean) => void;
@@ -23,21 +32,27 @@ interface GameState {
   markSeen: (speciesId: string) => void;
   catchCreature: (member: PartyMember) => boolean;
   consumeItem: (itemId: string) => boolean;
+  earnCurrency: (amount: number) => void;
+  spendCurrency: (amount: number) => boolean;
+  addItem: (itemId: string, quantity: number) => void;
+  grantExperience: (uid: string, xp: number) => ExperienceGainResult | null;
+  setCurrentZone: (zoneId: string) => void;
   resetGame: () => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
   playerName: DEFAULT_PLAYER_NAME,
   selectedLine: null,
-  currentZone: STARTING_ZONE,
+  currentZoneId: STARTING_ZONE_ID,
   battlesWon: 0,
   party: [],
   seenSpeciesIds: [],
   caughtSpeciesIds: [],
   inventory: defaultStartingInventory(),
+  currency: STARTING_CURRENCY,
 
   selectStarter: (line) => {
-    const participant = buildStarterParticipant(line, DEMO_BATTLE_LEVEL, "player-1");
+    const participant = buildStarterParticipant(line, STARTER_STARTING_LEVEL, "player-1");
     const member = partyMemberFromParticipant(participant, "starter");
     set({
       selectedLine: line,
@@ -81,14 +96,41 @@ export const useGameStore = create<GameState>((set, get) => ({
     return true;
   },
 
+  earnCurrency: (amount) => set((state) => ({ currency: state.currency + Math.max(0, amount) })),
+
+  spendCurrency: (amount) => {
+    const { currency } = get();
+    if (amount <= 0 || currency < amount) return false;
+    set({ currency: currency - amount });
+    return true;
+  },
+
+  addItem: (itemId, quantity) =>
+    set((state) => ({
+      inventory: { ...state.inventory, [itemId]: (state.inventory[itemId] ?? 0) + quantity },
+    })),
+
+  grantExperience: (uid, xp) => {
+    const member = get().party.find((m) => m.uid === uid);
+    if (!member) return null;
+    const result = addExperience(member, xp);
+    set((state) => ({
+      party: state.party.map((m) => (m.uid === uid ? result.member : m)),
+    }));
+    return result;
+  },
+
+  setCurrentZone: (zoneId) => set({ currentZoneId: zoneId }),
+
   resetGame: () =>
     set({
       selectedLine: null,
-      currentZone: STARTING_ZONE,
+      currentZoneId: STARTING_ZONE_ID,
       battlesWon: 0,
       party: [],
       seenSpeciesIds: [],
       caughtSpeciesIds: [],
       inventory: defaultStartingInventory(),
+      currency: STARTING_CURRENCY,
     }),
 }));

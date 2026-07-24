@@ -107,6 +107,8 @@ export const ItemDataSchema = z.object({
   description: z.string(),
   catchMultiplier: z.number().positive().optional(),
   startingQuantity: z.number().int().nonnegative().default(0),
+  /** Absent = not sold in the Shop (e.g. key items). */
+  price: z.number().int().positive().optional(),
 });
 
 export const ItemsFileSchema = z.object({
