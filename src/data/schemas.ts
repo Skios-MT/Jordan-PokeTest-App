@@ -82,9 +82,25 @@ export const TypeChartFileSchema = z.object({
   matrix: z.record(z.string(), z.record(z.string(), z.number())),
 });
 
+export const MoveDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: TypeNameSchema,
+  category: z.enum(["physical", "special"]),
+  power: z.number().int().positive(),
+  accuracy: z.number().int().min(1).max(100),
+  basePriority: z.number().int(),
+});
+
+export const MovesFileSchema = z.object({
+  moves: z.array(MoveDataSchema),
+});
+
 export type TypeName = z.infer<typeof TypeNameSchema>;
 export type StatBlock = z.infer<typeof StatBlockSchema>;
 export type StarterLine = z.infer<typeof StarterLineSchema>;
+export type StarterStage = z.infer<typeof StarterStageSchema>;
 export type Legendary = z.infer<typeof LegendarySchema>;
 export type RegionalVariant = z.infer<typeof RegionalVariantSchema>;
 export type TypeChartFile = z.infer<typeof TypeChartFileSchema>;
+export type MoveData = z.infer<typeof MoveDataSchema>;

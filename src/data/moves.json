@@ -1,0 +1,8 @@
+{
+  "moves": [
+    { "id": "tackle", "name": "Tackle", "type": "Normal", "category": "physical", "power": 40, "accuracy": 100, "basePriority": 0 },
+    { "id": "vine_lash", "name": "Vine Lash", "type": "Grass", "category": "physical", "power": 45, "accuracy": 100, "basePriority": 0 },
+    { "id": "ember", "name": "Ember", "type": "Fire", "category": "special", "power": 45, "accuracy": 100, "basePriority": 0 },
+    { "id": "water_jet", "name": "Water Jet", "type": "Water", "category": "physical", "power": 45, "accuracy": 100, "basePriority": 0 }
+  ]
+}

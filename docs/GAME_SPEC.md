@@ -209,6 +209,16 @@ Splash → Title → (New Game: Region Select → Starter Select) / (Continue: L
                └─▶ Result Screen (XP bar animation, catch prompt, level-up moves)
 ```
 
+**Implementation status** (`src/screens/`, wired up via `src/navigation/RootNavigator.tsx`): Title,
+Region Select, Starter Select, Home, and Battle View all exist and are navigable end to end, with
+Battle View driven by the real engine (`src/engine/battleManager.ts`) rather than mock data. Region
+Select is a single-region confirmation screen rather than a real choice — Melita's three islands
+(section 2) are one region, not several to pick between; a second region would slot in here later.
+Party Management, Codex, and Bag are stub buttons on Home ("coming soon") rather than full screens.
+The Result Screen shows win/lose only — no XP bar, catch prompt, or level-up flow yet, since there's
+no XP/leveling/catching-in-battle system wired into the UI. Move Select shows type + name only, no
+PP (PP isn't modeled in the engine) and no long-press tooltip.
+
 ### 4.2 Touch Controls
 
 - **Overworld:** virtual joystick (left-thumb zone, auto-hide when idle) OR tap-to-pathfind (recommended primary — better one-handed mobile ergonomics); interact button context-sensitive (bottom-right thumb zone).
