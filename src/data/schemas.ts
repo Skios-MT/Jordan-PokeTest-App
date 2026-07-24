@@ -106,10 +106,12 @@ export const ItemDataSchema = z.object({
   category: ItemCategorySchema,
   description: z.string(),
   catchMultiplier: z.number().positive().optional(),
-  /** Percent of max HP restored when used in battle (medicine items only). */
-  healPercent: z.number().positive().max(100).optional(),
+  /** What "Use Item" does with this item, in and out of battle. Absent = not directly usable. */
+  effect: z.enum(["heal", "level_up"]).optional(),
+  /** Flat HP restored by a "heal" item (medicine). */
+  healAmount: z.number().int().positive().optional(),
   startingQuantity: z.number().int().nonnegative().default(0),
-  /** Absent = not sold in the Shop (e.g. key items). */
+  /** Absent = not sold in the Shop (e.g. key items, or rare drops like Kinnie). */
   price: z.number().int().positive().optional(),
 });
 

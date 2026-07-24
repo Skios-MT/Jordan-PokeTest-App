@@ -18,13 +18,16 @@ export function StarterSelectScreen({ navigation }: Props) {
   const playerName = useGameStore((s) => s.playerName);
   const selectedLine = useGameStore((s) => s.selectedLine);
   const party = useGameStore((s) => s.party);
+  const currentZoneId = useGameStore((s) => s.currentZoneId);
 
   const starterLine = starters.find((s) => s.line === selectedLine);
   const stageOne = starterLine?.stages[0];
   const partner = party[0];
 
   const handleConfirm = () => {
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+    // Exploring (the Map) is the default screen — reset straight into it
+    // rather than the Home menu.
+    navigation.reset({ index: 0, routes: [{ name: "Map", params: { zoneId: currentZoneId } }] });
   };
 
   if (!starterLine || !stageOne) {

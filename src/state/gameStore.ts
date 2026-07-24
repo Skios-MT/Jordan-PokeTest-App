@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { buildStarterParticipant, STARTER_STARTING_LEVEL, type StarterLineName } from "../game/creatureFactory";
-import { partyMemberFromParticipant, addExperience, type PartyMember } from "../game/party";
-import { defaultStartingInventory } from "../game/itemsRepo";
+import { partyMemberFromParticipant, partyMemberStats, addExperience, applyLevelUp, type PartyMember } from "../game/party";
+import { defaultStartingInventory, getItem } from "../game/itemsRepo";
 
 const STARTING_ZONE_ID = "melita_woods";
 const DEFAULT_PLAYER_NAME = "Traveler";
@@ -14,6 +14,11 @@ export interface ExperienceGainResult {
   newLevel: number;
   levelsGained: number;
 }
+
+export type UseItemResult =
+  | { applied: false }
+  | { applied: true; effect: "heal"; healedAmount: number }
+  | { applied: true; effect: "level_up"; newLevel: number };
 
 interface GameState {
   playerName: string;
@@ -39,6 +44,10 @@ interface GameState {
   setCurrentZone: (zoneId: string) => void;
   setPlayerName: (name: string) => void;
   releaseCreature: (uid: string) => boolean;
+  /** Applies a "heal" or "level_up" item to a party member outside of battle (e.g. from Creature Detail). */
+  useItemOnPartyMember: (uid: string, itemId: string) => UseItemResult;
+  /** Bumps a party member's level by 1 in the store, independent of any live battle context. */
+  bumpPartyMemberLevel: (uid: string) => void;
   resetGame: () => void;
 }
 
@@ -133,6 +142,44 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!exists) return false;
     set({ party: party.filter((m) => m.uid !== uid) });
     return true;
+  },
+
+  useItemOnPartyMember: (uid, itemId) => {
+    const { party, inventory } = get();
+    const member = party.find((m) => m.uid === uid);
+    if (!member) return { applied: false };
+    const qty = inventory[itemId] ?? 0;
+    if (qty <= 0) return { applied: false };
+    const item = getItem(itemId);
+
+    if (item.effect === "heal" && item.healAmount !== undefined) {
+      const maxHp = partyMemberStats(member).hp;
+      const newHp = Math.min(maxHp, member.currentHp + item.healAmount);
+      const healedAmount = newHp - member.currentHp;
+      set({
+        party: party.map((m) => (m.uid === uid ? { ...m, currentHp: newHp } : m)),
+        inventory: { ...inventory, [itemId]: qty - 1 },
+      });
+      return { applied: true, effect: "heal", healedAmount };
+    }
+
+    if (item.effect === "level_up") {
+      const leveled = applyLevelUp(member);
+      set({
+        party: party.map((m) => (m.uid === uid ? leveled : m)),
+        inventory: { ...inventory, [itemId]: qty - 1 },
+      });
+      return { applied: true, effect: "level_up", newLevel: leveled.level };
+    }
+
+    return { applied: false };
+  },
+
+  bumpPartyMemberLevel: (uid) => {
+    const member = get().party.find((m) => m.uid === uid);
+    if (!member) return;
+    const leveled = applyLevelUp(member);
+    set((state) => ({ party: state.party.map((m) => (m.uid === uid ? leveled : m)) }));
   },
 
   resetGame: () =>

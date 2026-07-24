@@ -31,8 +31,9 @@
       "id": "pastizz",
       "name": "Pastizz",
       "category": "medicine",
-      "description": "A flaky savoury pastry sold at every ferry stop. Restores 20% of max HP in battle.",
-      "healPercent": 20,
+      "description": "A flaky savoury pastry sold at every ferry stop. Restores 15 HP when used.",
+      "effect": "heal",
+      "healAmount": 15,
       "startingQuantity": 3,
       "price": 50
     },
@@ -40,8 +41,9 @@
       "id": "qassata",
       "name": "Qassata",
       "category": "medicine",
-      "description": "A ricotta-filled pastry parcel, hearty enough to restore 50% of max HP in battle.",
-      "healPercent": 50,
+      "description": "A ricotta-filled pastry parcel, hearty enough to restore 40 HP when used.",
+      "effect": "heal",
+      "healAmount": 40,
       "startingQuantity": 0,
       "price": 140
     },
@@ -49,10 +51,19 @@
       "id": "ftira_biz_zejt",
       "name": "Ftira biz-Zejt",
       "category": "medicine",
-      "description": "A whole olive-oil-soaked ftira loaf, packed with tomato and tuna — restores 75% of max HP in battle.",
-      "healPercent": 75,
+      "description": "A whole olive-oil-soaked ftira loaf, packed with tomato and tuna — restores 80 HP when used.",
+      "effect": "heal",
+      "healAmount": 80,
       "startingQuantity": 0,
       "price": 220
+    },
+    {
+      "id": "kinnie",
+      "name": "Kinnie",
+      "category": "medicine",
+      "description": "A bittersweet local soft drink, said to make a creature grow a whole level in one gulp. Rare — never sold, only found as a wild-encounter drop.",
+      "effect": "level_up",
+      "startingQuantity": 0
     },
     {
       "id": "silent_bell",

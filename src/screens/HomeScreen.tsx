@@ -8,6 +8,8 @@ import { HpBar } from "./components/HpBar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { TypeBadge } from "./components/TypeBadge";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { HoverTip } from "./components/HoverTip";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home">;
@@ -20,6 +22,12 @@ export function HomeScreen({ navigation }: Props) {
 
   const leadMember = party[0];
   const zoneName = getZoneName(currentZoneId);
+
+  useKeyboardShortcuts({
+    b: () => navigation.navigate("Bag"),
+    p: () => navigation.navigate("Party"),
+    m: () => navigation.popToTop(),
+  });
 
   return (
     <ScreenBackground style={styles.container}>
@@ -45,25 +53,41 @@ export function HomeScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.actions}>
-        <PrimaryButton
-          testID="nav-explore"
-          label={`Explore ${zoneName}`}
-          onPress={() => navigation.navigate("Map", { zoneId: currentZoneId })}
-        />
-        <PrimaryButton
-          testID="nav-party"
-          label="Party"
-          variant="secondary"
-          onPress={() => navigation.navigate("Party")}
-        />
-        <PrimaryButton
-          testID="nav-codex"
-          label="Codex"
-          variant="secondary"
-          onPress={() => navigation.navigate("Codex")}
-        />
-        <PrimaryButton testID="nav-bag" label="Bag" variant="secondary" onPress={() => navigation.navigate("Bag")} />
-        <PrimaryButton testID="nav-shop" label="Shop" variant="secondary" onPress={() => navigation.navigate("Shop")} />
+        <HoverTip text="Return to the map and keep exploring. Keyboard: M does this from anywhere.">
+          <PrimaryButton testID="nav-explore" label={`Explore ${zoneName}`} onPress={() => navigation.popToTop()} />
+        </HoverTip>
+        <HoverTip text="Manage your party: check stats, use items, switch order, or release a creature. Keyboard: P.">
+          <PrimaryButton
+            testID="nav-party"
+            label="Party"
+            variant="secondary"
+            onPress={() => navigation.navigate("Party")}
+          />
+        </HoverTip>
+        <HoverTip text="Browse every species you've seen or caught so far.">
+          <PrimaryButton
+            testID="nav-codex"
+            label="Codex"
+            variant="secondary"
+            onPress={() => navigation.navigate("Codex")}
+          />
+        </HoverTip>
+        <HoverTip text="Check your balls, medicine, and key items. Keyboard: B.">
+          <PrimaryButton
+            testID="nav-bag"
+            label="Bag"
+            variant="secondary"
+            onPress={() => navigation.navigate("Bag")}
+          />
+        </HoverTip>
+        <HoverTip text="Spend gold on balls and medicine — earned by catching or defeating wild creatures.">
+          <PrimaryButton
+            testID="nav-shop"
+            label="Shop"
+            variant="secondary"
+            onPress={() => navigation.navigate("Shop")}
+          />
+        </HoverTip>
       </View>
     </ScreenBackground>
   );

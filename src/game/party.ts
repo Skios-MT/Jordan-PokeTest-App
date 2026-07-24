@@ -100,3 +100,16 @@ export function addExperience(member: PartyMember, xpGained: number): LevelUpRes
     levelsGained,
   };
 }
+
+/** Direct +1 level (e.g. the Kinnie item) — same partial-HP-top-up rule as a level-up from XP. */
+export function applyLevelUp(member: PartyMember): PartyMember {
+  const prevMaxHp = effectiveStats(member.baseStats, member.level).hp;
+  const newLevel = member.level + 1;
+  const newMaxHp = effectiveStats(member.baseStats, newLevel).hp;
+  const hpGain = newMaxHp - prevMaxHp;
+  return {
+    ...member,
+    level: newLevel,
+    currentHp: Math.min(newMaxHp, member.currentHp + hpGain),
+  };
+}

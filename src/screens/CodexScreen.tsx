@@ -9,6 +9,7 @@ import { TypeBadge } from "./components/TypeBadge";
 import { CreatureAvatar } from "./components/CreatureAvatar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors, typeColor } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Codex">;
@@ -19,6 +20,8 @@ export function CodexScreen({ navigation }: Props) {
   const seenSpeciesIds = useGameStore((s) => s.seenSpeciesIds);
   const caughtSpeciesIds = useGameStore((s) => s.caughtSpeciesIds);
   const [typeFilter, setTypeFilter] = useState<TypeName | null>(null);
+
+  useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
   const entries = useMemo(
     () => (typeFilter ? DEX_ENTRIES.filter((e) => e.types.includes(typeFilter)) : DEX_ENTRIES),

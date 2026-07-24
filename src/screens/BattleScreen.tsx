@@ -7,9 +7,9 @@ import type { BattleParticipant } from "../game/creatureFactory";
 import { buildZoneEncounterTable, rollEncounter } from "../game/encounterTable";
 import { getZoneEncounterSettings } from "../game/zones";
 import { creatureFromPartyMember, partyMemberFromParticipant, partyMemberStats } from "../game/party";
-import { xpRewardForLevel, currencyRewardForLevel } from "../game/progression";
+import { xpRewardForLevel, currencyRewardForLevel, effectiveStats } from "../game/progression";
 import { getMove } from "../game/movesRepo";
-import { pickBestAvailableBall, getItem, healingItems } from "../game/itemsRepo";
+import { pickBestAvailableBall, getItem, usableItems } from "../game/itemsRepo";
 import { BattleStateMachine, type Winner } from "../engine/battleManager";
 import { attemptCatch, type ContainerType } from "../engine/catching";
 import { isCruxOnCooldown, CRUX_AURA_STATUS_ID } from "../engine/cruxAura";
@@ -22,7 +22,12 @@ import { TypeBadge } from "./components/TypeBadge";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { CreatureAvatar } from "./components/CreatureAvatar";
 import { useCombatantAnimation } from "./components/useCombatantAnimation";
+import { HoverTip } from "./components/HoverTip";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
+
+/** Chance a defeated or caught wild creature drops a Kinnie — rare, never sold. */
+const KINNIE_DROP_CHANCE = 0.1;
 
 type Props = NativeStackScreenProps<RootStackParamList, "Battle">;
 
@@ -58,6 +63,7 @@ interface BattleRewards {
   xp: number;
   leveledUp: boolean;
   newLevel?: number;
+  kinnieDropped?: boolean;
 }
 
 interface BattleSnapshot {
@@ -91,6 +97,8 @@ export function BattleScreen({ navigation }: Props) {
   const markSeen = useGameStore((s) => s.markSeen);
   const earnCurrency = useGameStore((s) => s.earnCurrency);
   const grantExperience = useGameStore((s) => s.grantExperience);
+  const addItem = useGameStore((s) => s.addItem);
+  const bumpPartyMemberLevel = useGameStore((s) => s.bumpPartyMemberLevel);
   const party = useGameStore((s) => s.party);
 
   const [activeUid] = useState<string | undefined>(() => party.find((m) => m.currentHp > 0)?.uid);
@@ -149,6 +157,16 @@ export function BattleScreen({ navigation }: Props) {
     return ids[Math.floor(Math.random() * ids.length)];
   }
 
+  /** 10% chance, rolled once per defeated/caught wild creature — Kinnie is never sold, drop-only. */
+  function rollKinnieDrop(): boolean {
+    const dropped = Math.random() < KINNIE_DROP_CHANCE;
+    if (dropped) {
+      addItem("kinnie", 1);
+      pushLog([`Wild ${enemy.displayName} dropped a Kinnie!`]);
+    }
+    return dropped;
+  }
+
   function finishBattle(result: "player" | "enemy", finalCtx: BattleContext) {
     setOutcome(result);
     recordBattleResult(result === "player");
@@ -158,11 +176,13 @@ export function BattleScreen({ navigation }: Props) {
     const xp = xpRewardForLevel(enemy.creature.level);
     earnCurrency(money);
     const xpResult: ExperienceGainResult | null = grantExperience(finalCtx.playerActive.id, xp);
+    const kinnieDropped = rollKinnieDrop();
     setRewards({
       money,
       xp,
       leveledUp: xpResult?.leveledUp ?? false,
       newLevel: xpResult?.newLevel,
+      kinnieDropped,
     });
   }
 
@@ -287,29 +307,51 @@ export function BattleScreen({ navigation }: Props) {
     setOutcome("fled");
   }
 
-  const healableItems = healingItems().filter((item) => (inventory[item.id] ?? 0) > 0);
+  const applicableItems = usableItems().filter((item) => (inventory[item.id] ?? 0) > 0);
 
   function handleUseItem(itemId: string) {
-    if (!fsm || outcome || forcedSwitchPending || resolving || fsm.getState() !== "ACTION_SELECT") return;
+    if (!fsm || !activeMember || outcome || forcedSwitchPending || resolving || fsm.getState() !== "ACTION_SELECT") return;
     const item = getItem(itemId);
-    if (item.healPercent === undefined) return;
     const ctx = fsm.getContext();
-    const maxHp = ctx.playerActive.stats.hp;
-    const before = ctx.playerActive.currentHp;
-    const healAmount = Math.round((maxHp * item.healPercent) / 100);
-    const after = Math.min(maxHp, before + healAmount);
-    ctx.playerActive.currentHp = after;
-    const healedAmount = after - before;
+    const name = activeMember.displayName;
 
-    consumeItem(itemId);
-    setShowItems(false);
-    playerAnim.heal();
+    if (item.effect === "heal" && item.healAmount !== undefined) {
+      const maxHp = ctx.playerActive.stats.hp;
+      const before = ctx.playerActive.currentHp;
+      const after = Math.min(maxHp, before + item.healAmount);
+      ctx.playerActive.currentHp = after;
+      const healedAmount = after - before;
 
-    const name = activeMember?.displayName ?? "Your creature";
-    runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
-      `You used the ${item.name}!`,
-      `${name} recovered ${healedAmount} HP!`,
-    ]);
+      consumeItem(itemId);
+      setShowItems(false);
+      playerAnim.heal();
+
+      runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
+        `You used the ${item.name}!`,
+        `${name} recovered ${healedAmount} HP!`,
+      ]);
+      return;
+    }
+
+    if (item.effect === "level_up") {
+      const prevMaxHp = ctx.playerActive.stats.hp;
+      const newLevel = ctx.playerActive.level + 1;
+      const newStats = effectiveStats(activeMember.baseStats, newLevel);
+      const hpGain = newStats.hp - prevMaxHp;
+      ctx.playerActive.level = newLevel;
+      ctx.playerActive.stats = newStats;
+      ctx.playerActive.currentHp = Math.min(newStats.hp, ctx.playerActive.currentHp + hpGain);
+
+      consumeItem(itemId);
+      bumpPartyMemberLevel(ctx.playerActive.id);
+      setShowItems(false);
+      playerAnim.heal();
+
+      runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
+        `You used the ${item.name}!`,
+        `${name} grew to level ${newLevel}!`,
+      ]);
+    }
   }
 
   const availableBall = pickBestAvailableBall(inventory);
@@ -340,8 +382,9 @@ export function BattleScreen({ navigation }: Props) {
           ? `Gotcha! Wild ${enemy.displayName} was caught!`
           : `Gotcha! ...but your party is full (6/6), so it couldn't be kept.`,
       ]);
+      const kinnieDropped = rollKinnieDrop();
       updatePartyMemberHp(ctx.playerActive.id, ctx.playerActive.currentHp);
-      setRewards({ money, xp: 0, leveledUp: false });
+      setRewards({ money, xp: 0, leveledUp: false, kinnieDropped });
       setOutcome("caught");
       return;
     }
@@ -352,6 +395,18 @@ export function BattleScreen({ navigation }: Props) {
       }.`,
     ]);
   }
+
+  const actionsDisabled = !!outcome || forcedSwitchPending || resolving;
+
+  useKeyboardShortcuts({
+    r: handleFlee,
+    b: () => {
+      if (!actionsDisabled) setShowItems(true);
+    },
+    p: () => {
+      if (!actionsDisabled) setShowParty(true);
+    },
+  });
 
   if (!activeMember || !fsm || !snapshot) {
     return (
@@ -367,7 +422,6 @@ export function BattleScreen({ navigation }: Props) {
 
   const playerMoves = activeMember.moveIds.map(getMove);
   const reserves = party.filter((m) => m.uid !== activeMember.uid && m.currentHp > 0);
-  const actionsDisabled = !!outcome || forcedSwitchPending || resolving;
 
   return (
     <View style={styles.container}>
@@ -403,93 +457,114 @@ export function BattleScreen({ navigation }: Props) {
 
       <View style={styles.actionGrid}>
         {playerMoves.map((move) => (
-          <Pressable
+          <HoverTip
             key={move.id}
-            testID={`move-${move.id}`}
-            onPress={() => handleMove(move.id, move.name)}
-            disabled={actionsDisabled}
-            style={({ pressed }) => [styles.moveButton, pressed && styles.moveButtonPressed]}
+            style={styles.moveButtonHoverWrap}
+            text={`${move.category === "special" ? "Special" : "Physical"} ${move.type} move. Power ${move.power}, accuracy ${move.accuracy}%.`}
           >
-            <Text style={styles.moveName}>{move.name}</Text>
-            <TypeBadge type={move.type} />
-          </Pressable>
+            <Pressable
+              testID={`move-${move.id}`}
+              onPress={() => handleMove(move.id, move.name)}
+              disabled={actionsDisabled}
+              style={({ pressed }) => [styles.moveButton, pressed && styles.moveButtonPressed]}
+            >
+              <Text style={styles.moveName}>{move.name}</Text>
+              <TypeBadge type={move.type} />
+            </Pressable>
+          </HoverTip>
         ))}
-        <Pressable
-          testID="invoke-crux"
-          onPress={handleInvokeCrux}
-          disabled={actionsDisabled || snapshot.playerCruxOnCooldown}
-          style={({ pressed }) => [
-            styles.moveButton,
-            styles.cruxButton,
-            (snapshot.playerCruxOnCooldown || actionsDisabled) && styles.moveButtonDisabled,
-            pressed && styles.moveButtonPressed,
-          ]}
+        <HoverTip
+          style={styles.moveButtonHoverWrap}
+          text="Boosts your creature's stats for a few turns, then goes on cooldown. Costs the turn to activate."
         >
-          <Text style={styles.moveName}>Invoke Crux</Text>
-          <Text style={styles.cruxHint}>{snapshot.playerCruxOnCooldown ? "on cooldown" : "costs the turn"}</Text>
-        </Pressable>
-        <Pressable
-          testID="catch-ball"
-          onPress={handleCatch}
-          disabled={actionsDisabled || !availableBall}
-          style={({ pressed }) => [
-            styles.moveButton,
-            styles.catchButton,
-            (actionsDisabled || !availableBall) && styles.moveButtonDisabled,
-            pressed && styles.moveButtonPressed,
-          ]}
+          <Pressable
+            testID="invoke-crux"
+            onPress={handleInvokeCrux}
+            disabled={actionsDisabled || snapshot.playerCruxOnCooldown}
+            style={({ pressed }) => [
+              styles.moveButton,
+              styles.cruxButton,
+              (snapshot.playerCruxOnCooldown || actionsDisabled) && styles.moveButtonDisabled,
+              pressed && styles.moveButtonPressed,
+            ]}
+          >
+            <Text style={styles.moveName}>Invoke Crux</Text>
+            <Text style={styles.cruxHint}>{snapshot.playerCruxOnCooldown ? "on cooldown" : "costs the turn"}</Text>
+          </Pressable>
+        </HoverTip>
+        <HoverTip
+          style={styles.moveButtonHoverWrap}
+          text="Throw a ball to try to catch the wild creature. Lower HP and status conditions improve the odds. If it breaks free, the turn is still spent."
         >
-          <Text style={styles.moveName}>{availableBall ? `Throw ${availableBall.name}` : "No balls left"}</Text>
-          <Text style={styles.cruxHint}>{availableBall ? "costs the turn if it fails" : "check your Bag"}</Text>
-        </Pressable>
-        <Pressable
-          testID="open-party-sheet"
-          onPress={() => setShowParty(true)}
-          disabled={actionsDisabled}
-          style={({ pressed }) => [
-            styles.moveButton,
-            styles.partyButtonHalf,
-            actionsDisabled && styles.moveButtonDisabled,
-            pressed && styles.moveButtonPressed,
-          ]}
-        >
-          <Text style={styles.moveName}>Party</Text>
-        </Pressable>
-        <Pressable
-          testID="open-item-sheet"
-          onPress={() => setShowItems(true)}
-          disabled={actionsDisabled || healableItems.length === 0}
-          style={({ pressed }) => [
-            styles.moveButton,
-            styles.partyButtonHalf,
-            (actionsDisabled || healableItems.length === 0) && styles.moveButtonDisabled,
-            pressed && styles.moveButtonPressed,
-          ]}
-        >
-          <Text style={styles.moveName}>Use Item</Text>
-          <Text style={styles.cruxHint}>{healableItems.length > 0 ? "heal — costs the turn" : "no medicine left"}</Text>
-        </Pressable>
-        <Pressable
-          testID="flee-button"
-          onPress={handleFlee}
-          disabled={actionsDisabled}
-          style={({ pressed }) => [
-            styles.moveButton,
-            styles.fleeButton,
-            actionsDisabled && styles.moveButtonDisabled,
-            pressed && styles.moveButtonPressed,
-          ]}
-        >
-          <Text style={styles.moveName}>Run Away</Text>
-          <Text style={styles.cruxHint}>flee the encounter</Text>
-        </Pressable>
+          <Pressable
+            testID="catch-ball"
+            onPress={handleCatch}
+            disabled={actionsDisabled || !availableBall}
+            style={({ pressed }) => [
+              styles.moveButton,
+              styles.catchButton,
+              (actionsDisabled || !availableBall) && styles.moveButtonDisabled,
+              pressed && styles.moveButtonPressed,
+            ]}
+          >
+            <Text style={styles.moveName}>{availableBall ? `Throw ${availableBall.name}` : "No balls left"}</Text>
+            <Text style={styles.cruxHint}>{availableBall ? "costs the turn if it fails" : "check your Bag"}</Text>
+          </Pressable>
+        </HoverTip>
+        <HoverTip style={styles.moveButtonHoverWrap} text="Send out a different party member. Voluntary switches cost the turn; a fainted lead gets a free forced switch instead.">
+          <Pressable
+            testID="open-party-sheet"
+            onPress={() => setShowParty(true)}
+            disabled={actionsDisabled}
+            style={({ pressed }) => [
+              styles.moveButton,
+              styles.partyButtonHalf,
+              actionsDisabled && styles.moveButtonDisabled,
+              pressed && styles.moveButtonPressed,
+            ]}
+          >
+            <Text style={styles.moveName}>Party</Text>
+          </Pressable>
+        </HoverTip>
+        <HoverTip style={styles.moveButtonHoverWrap} text="Use a medicine item to heal, or a Kinnie to instantly gain a level. Costs the turn.">
+          <Pressable
+            testID="open-item-sheet"
+            onPress={() => setShowItems(true)}
+            disabled={actionsDisabled || applicableItems.length === 0}
+            style={({ pressed }) => [
+              styles.moveButton,
+              styles.partyButtonHalf,
+              (actionsDisabled || applicableItems.length === 0) && styles.moveButtonDisabled,
+              pressed && styles.moveButtonPressed,
+            ]}
+          >
+            <Text style={styles.moveName}>Use Item</Text>
+            <Text style={styles.cruxHint}>{applicableItems.length > 0 ? "heal/level up — costs the turn" : "no usable items"}</Text>
+          </Pressable>
+        </HoverTip>
+        <HoverTip style={styles.fleeButtonHoverWrap} text="Flee the encounter immediately. No reward, but no penalty either. Keyboard: R.">
+          <Pressable
+            testID="flee-button"
+            onPress={handleFlee}
+            disabled={actionsDisabled}
+            style={({ pressed }) => [
+              styles.moveButton,
+              styles.fleeButton,
+              actionsDisabled && styles.moveButtonDisabled,
+              pressed && styles.moveButtonPressed,
+            ]}
+          >
+            <Text style={styles.moveName}>Run Away</Text>
+            <Text style={styles.cruxHint}>flee the encounter</Text>
+          </Pressable>
+        </HoverTip>
       </View>
 
       <Modal visible={showItems} transparent animationType="none" onRequestClose={() => setShowItems(false)}>
         <View style={styles.sheetBackdrop}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Use Item</Text>
-            {healableItems.map((item) => (
+            {applicableItems.map((item) => (
               <Pressable
                 key={item.id}
                 testID={`use-item-${item.id}`}
@@ -499,10 +574,10 @@ export function BattleScreen({ navigation }: Props) {
                 <Text style={styles.sheetCreature}>
                   {item.name} <Text style={styles.sheetLevel}>x{inventory[item.id] ?? 0}</Text>
                 </Text>
-                <Text style={styles.sheetHp}>+{item.healPercent}% HP</Text>
+                <Text style={styles.sheetHp}>{item.effect === "heal" ? `+${item.healAmount} HP` : "+1 level"}</Text>
               </Pressable>
             ))}
-            {healableItems.length === 0 && <Text style={styles.sheetNote}>No usable medicine in your Bag.</Text>}
+            {applicableItems.length === 0 && <Text style={styles.sheetNote}>No usable items in your Bag.</Text>}
             <PrimaryButton label="Close" variant="secondary" onPress={() => setShowItems(false)} />
           </View>
         </View>
@@ -586,6 +661,7 @@ export function BattleScreen({ navigation }: Props) {
             <Text style={styles.rewardsText}>
               +{rewards.money} gold{rewards.xp > 0 ? `, +${rewards.xp} XP` : ""}
               {rewards.leveledUp ? ` — grew to level ${rewards.newLevel}!` : ""}
+              {rewards.kinnieDropped ? " — and a Kinnie dropped!" : ""}
             </Text>
           )}
           <PrimaryButton testID="return-to-home" label="Return to Home" onPress={() => navigation.popToTop()} />
@@ -771,6 +847,13 @@ const styles = StyleSheet.create({
     flexBasis: "100%",
     alignItems: "center",
     borderColor: colors.danger,
+  },
+  moveButtonHoverWrap: {
+    flexGrow: 1,
+    flexBasis: "45%",
+  },
+  fleeButtonHoverWrap: {
+    flexBasis: "100%",
   },
   sheetBackdrop: {
     flex: 1,

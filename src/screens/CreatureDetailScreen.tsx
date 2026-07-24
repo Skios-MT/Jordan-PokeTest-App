@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
@@ -7,12 +7,14 @@ import { getDexEntry } from "../game/speciesCatalog";
 import { getMove } from "../game/movesRepo";
 import { partyMemberStats } from "../game/party";
 import { xpToNextLevel } from "../game/progression";
+import { usableItems } from "../game/itemsRepo";
 import type { StatBlock } from "../data/schemas";
 import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
 import { CreatureAvatar } from "./components/CreatureAvatar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CreatureDetail">;
@@ -47,7 +49,13 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   const party = useGameStore((s) => s.party);
   const caughtSpeciesIds = useGameStore((s) => s.caughtSpeciesIds);
   const releaseCreature = useGameStore((s) => s.releaseCreature);
+  const inventory = useGameStore((s) => s.inventory);
+  const useItemOnPartyMember = useGameStore((s) => s.useItemOnPartyMember);
   const [confirmingRelease, setConfirmingRelease] = useState(false);
+  const [showItems, setShowItems] = useState(false);
+  const [itemFeedback, setItemFeedback] = useState<string | null>(null);
+
+  useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
   const partyMember = params.source === "party" ? party.find((m) => m.uid === params.uid) : undefined;
   const dexEntry = params.source === "species" ? getDexEntry(params.speciesId) : undefined;
@@ -78,6 +86,20 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   const signatureMove = dexEntry?.signatureMove;
   const isCaught = params.source === "species" ? caughtSpeciesIds.includes(params.speciesId) : true;
 
+  const applicableItems = usableItems().filter((item) => (inventory[item.id] ?? 0) > 0);
+
+  function handleUseItem(itemId: string, itemName: string) {
+    if (!partyMember) return;
+    const result = useItemOnPartyMember(partyMember.uid, itemId);
+    if (!result.applied) return;
+    setShowItems(false);
+    if (result.effect === "heal") {
+      setItemFeedback(`${partyMember.displayName} used ${itemName} and recovered ${result.healedAmount} HP!`);
+    } else {
+      setItemFeedback(`${partyMember.displayName} drank ${itemName} and grew to level ${result.newLevel}!`);
+    }
+  }
+
   return (
     <ScreenBackground style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -103,6 +125,20 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
             <Text style={styles.xpText}>
               XP {partyMember.xp} / {xpToNextLevel(partyMember.level)} to Lv. {partyMember.level + 1}
             </Text>
+            <Pressable
+              testID="open-detail-item-sheet"
+              onPress={() => {
+                setItemFeedback(null);
+                setShowItems(true);
+              }}
+              disabled={applicableItems.length === 0}
+              style={[styles.useItemButton, applicableItems.length === 0 && styles.useItemButtonDisabled]}
+            >
+              <Text style={[styles.useItemButtonText, applicableItems.length === 0 && styles.useItemButtonTextDisabled]}>
+                {applicableItems.length > 0 ? "Use Item" : "No usable items in Bag"}
+              </Text>
+            </Pressable>
+            {itemFeedback && <Text style={styles.flavorText}>{itemFeedback}</Text>}
           </View>
         )}
 
@@ -181,6 +217,30 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
           </View>
         )}
       </ScrollView>
+
+      <Modal visible={showItems} transparent animationType="none" onRequestClose={() => setShowItems(false)}>
+        <View style={styles.sheetBackdrop}>
+          <View style={styles.sheet}>
+            <Text style={styles.sectionTitle}>Use Item</Text>
+            {applicableItems.map((item) => (
+              <Pressable
+                key={item.id}
+                testID={`detail-use-item-${item.id}`}
+                onPress={() => handleUseItem(item.id, item.name)}
+                style={styles.sheetRow}
+              >
+                <Text style={styles.flavorText}>
+                  {item.name} <Text style={styles.xpText}>x{inventory[item.id] ?? 0}</Text>
+                </Text>
+                <Text style={styles.xpText}>
+                  {item.effect === "heal" ? `+${item.healAmount} HP` : "+1 level"}
+                </Text>
+              </Pressable>
+            ))}
+            <PrimaryButton label="Close" variant="secondary" onPress={() => setShowItems(false)} />
+          </View>
+        </View>
+      </Modal>
 
       <PrimaryButton testID="back-button" label="Back" variant="secondary" onPress={() => navigation.goBack()} />
     </ScreenBackground>
@@ -341,5 +401,44 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: "700",
+  },
+  useItemButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  useItemButtonDisabled: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  useItemButtonText: {
+    color: "#0d1b2a",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  useItemButtonTextDisabled: {
+    color: colors.textMuted,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    gap: 12,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
 });

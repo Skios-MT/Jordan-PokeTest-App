@@ -5,6 +5,8 @@ import { useGameStore } from "../state/gameStore";
 import { purchasableItems } from "../game/itemsRepo";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { HoverTip } from "./components/HoverTip";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Shop">;
@@ -16,6 +18,8 @@ export function ShopScreen({ navigation }: Props) {
   const inventory = useGameStore((s) => s.inventory);
   const spendCurrency = useGameStore((s) => s.spendCurrency);
   const addItem = useGameStore((s) => s.addItem);
+
+  useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
   function buy(itemId: string, price: number) {
     if (!spendCurrency(price)) return;
@@ -43,18 +47,20 @@ export function ShopScreen({ navigation }: Props) {
               <Text style={styles.itemDescription}>{item.description}</Text>
               <View style={styles.buyRow}>
                 <Text style={styles.price}>{item.price} 🪙</Text>
-                <Pressable
-                  testID={`buy-${item.id}`}
-                  disabled={!canAfford}
-                  onPress={() => buy(item.id, item.price ?? 0)}
-                  style={({ pressed }) => [
-                    styles.buyButton,
-                    !canAfford && styles.buyButtonDisabled,
-                    pressed && canAfford && styles.buyButtonPressed,
-                  ]}
-                >
-                  <Text style={styles.buyButtonText}>Buy</Text>
-                </Pressable>
+                <HoverTip text={item.description}>
+                  <Pressable
+                    testID={`buy-${item.id}`}
+                    disabled={!canAfford}
+                    onPress={() => buy(item.id, item.price ?? 0)}
+                    style={({ pressed }) => [
+                      styles.buyButton,
+                      !canAfford && styles.buyButtonDisabled,
+                      pressed && canAfford && styles.buyButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.buyButtonText}>Buy</Text>
+                  </Pressable>
+                </HoverTip>
               </View>
             </View>
           );

@@ -9,6 +9,7 @@ import { TypeBadge } from "./components/TypeBadge";
 import { CreatureAvatar } from "./components/CreatureAvatar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Party">;
@@ -17,6 +18,8 @@ export function PartyScreen({ navigation }: Props) {
   const party = useGameStore((s) => s.party);
   const releaseCreature = useGameStore((s) => s.releaseCreature);
   const [confirmUid, setConfirmUid] = useState<string | null>(null);
+
+  useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
   return (
     <ScreenBackground style={styles.container}>

@@ -200,14 +200,15 @@ Everything else in this document is original and clear to ship.
 ```
 Splash → Title ("Chivalry & Antiquity") →
   (New Game: Name Entry → Region Select → Starter Quiz → Starter Reveal) / (Continue: Load Save)
-   └─▶ HOME (Overworld HUD)
-         ├─▶ Party Management (drag-reorder, held items, move-relearn)
-         ├─▶ Creature Index (Codex — grid view, filter by type/zone/caught-status)
-         ├─▶ Bag/Inventory (categorized tabs: Balls, Medicine, Key Items, Battle Items)
-         └─▶ BATTLE VIEW (modal, full-screen)
-               ├─▶ Move Select (swipe-up quick menu, 4 moves + type icon + PP)
-               ├─▶ Party Switch (bottom-sheet)
-               └─▶ Result Screen (XP bar animation, catch prompt, level-up moves)
+   └─▶ MAP (Exploring — the default/root screen)
+         ├─▶ "Menu" button / M key → HOME (party HUD + quick links)
+         │        ├─▶ Party Management (release, Use Item, move-relearn)
+         │        ├─▶ Creature Index (Codex — grid view, filter by type/zone/caught-status)
+         │        ├─▶ Bag/Inventory (categorized tabs: Balls, Medicine, Key Items, Battle Items)
+         │        └─▶ Shop (buy Balls/Medicine with gold)
+         └─▶ BATTLE VIEW (modal, full-screen), on stepping into dark grass
+               ├─▶ Move Select / Invoke Crux / Catch / Use Item / Run Away / Party Switch
+               └─▶ Result Screen (win/lose/caught/fled, gold + XP, level-up, Kinnie drop)
 ```
 
 **Implementation status** (`src/screens/`, wired up via `src/navigation/RootNavigator.tsx`): Title,
@@ -218,6 +219,19 @@ name, shown as a small subtitle). Region Select is a single-region confirmation 
 real choice — Melita's three islands (section 2) are one region, not several to pick between; a
 second region would slot in here later.
 
+**Map is the default/root screen**, not Home: confirming a starter resets navigation straight into
+Map, and every zone transition (`MapScreen`'s exit-tile handler) resets the stack's root to the new
+zone's Map rather than pushing, so there's always exactly one live Map instance and it always matches
+`currentZoneId`. Home is a secondary "menu" screen, reached by tapping "Menu" on Map (or pressing
+`M`) and dismissed the same way (`popToTop`) rather than being the screen you start on.
+
+**Keyboard controls** (`src/screens/components/useKeyboardShortcuts.ts`, web-only — a no-op on
+native): Map supports arrow-key movement in addition to the D-pad; `B` opens the Bag, `P` opens the
+Party sheet/screen, `M` opens/returns-to the Home menu (from any secondary screen, `M` pops straight
+back to the Map root), and in Battle View `R` flees the encounter. Hovering a button with a mouse for
+2+ seconds shows a short explanatory tooltip (`HoverTip` component, wraps action buttons in Battle,
+Shop, and Home) — a web-only affordance, inert on touch.
+
 **Starter selection** is no longer a direct tap-to-choose grid. New Game asks the player's name
 (`NameEntryScreen`, stored in `gameStore.playerName`), then after Region Select the player answers a
 3-question, island-themed personality quiz (`src/game/starterQuiz.ts`, `StarterQuizScreen.tsx` —
@@ -226,15 +240,26 @@ majority-answer line is assigned automatically and confirmed on a reveal screen
 (`StarterSelectScreen.tsx`) rather than picked by hand.
 
 **Map** (`src/game/mapData.ts`, `src/game/zones.ts`, `src/screens/MapScreen.tsx`) is three
-hand-authored 7x7 tile grids — Melita Woods, Luzzu Harbour, Azure Caverns — chained in a line, each
-with one exit tile leading to the next zone and one entrance (where the player arrives), matching
-the "one exit, one entrance" brief rather than the spec's full node-graph-of-many-zones world.
-Movement is a 4-directional D-pad rather than the spec's tap-to-pathfind (simpler to build correctly
+hand-authored irregular tile grids — Melita Woods (a 9x9 diamond-shaped clearing), Luzzu Harbour (a
+7x11 harbour with a narrow pier jutting out to the exit), Azure Caverns (a 9x9 zigzag cave) — chained
+in a line, each with one exit tile leading to the next zone and one entrance (where the player
+arrives), matching the "one exit, one entrance" brief rather than the spec's full
+node-graph-of-many-zones world. Each zone is a genuinely different size and silhouette rather than a
+uniform square: trees carve the outer shape as well as blocking movement, so the walkable footprint
+itself reads as an organic blob, a pier, or a winding passage (`parseMap` validates all rows in a
+zone are equal length; connectivity from the entrance to every dark-grass tile and the exit was
+hand-verified with a throwaway BFS script, not asserted at runtime). Movement is a 4-directional
+D-pad or the arrow keys (web) rather than the spec's tap-to-pathfind (simpler to build correctly
 first); the player avatar is a directional glyph, not sprite art, per the agreed "stylized
-placeholders" approach. Walking onto a grass tile rolls a 19.5% chance (`ENCOUNTER_CHANCE` in
-`MapScreen.tsx` — bumped 30% from an original 15% baseline) to trigger a wild battle drawn from
-`src/game/encounterTable.ts`'s weighted pool, whose level range is set per zone in `zones.ts` — later
-zones spawn stronger wild creatures.
+placeholders" approach.
+
+The tall-grass tile is now called **Dark Grass** and is deliberately far apart from Path in both hue
+and value — a near-black saturated green with a faint texture glyph vs. a warm, light sandy tan — so
+it never reads as "maybe just more path." **Encounters only trigger in Dark Grass** (`isEncounterTile`
+checks for the `"grass"` tile type only; Path and Exit tiles never roll an encounter). Walking onto a
+Dark Grass tile rolls a 19.5% chance (`ENCOUNTER_CHANCE` in `MapScreen.tsx` — bumped 30% from an
+original 15% baseline) to trigger a wild battle drawn from `src/game/encounterTable.ts`'s weighted
+pool, whose level range is set per zone in `zones.ts` — later zones spawn stronger wild creatures.
 
 Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
 action (`src/engine/catching.ts` wired to the Bag's ball items), randomized wild encounters, **party
@@ -243,13 +268,17 @@ active creature faints and a reserve remains — `BattleStateMachine.replacePlay
 Away** button (flees the encounter immediately, no reward, no penalty — a client-side action, since
 the engine's `resolveAction` already treats a submitted `"flee"` action as a no-op and this bypasses
 `submitActions` entirely rather than teaching the engine a new outcome), and a **Use Item** button
-that genuinely restores HP: it opens a sheet of the medicine items you're carrying, consumes one, and
-heals the active creature by that item's `healPercent` of max HP (see 4.3) before the enemy's turn
-resolves — this costs the turn, matching how throwing a ball or switching does. Each turn is still
-resolved atomically by the engine (`BattleStateMachine.submitActions`), but is *revealed* to the
-player in two sequential beats — the faster actor's line and animation play immediately, the slower
-actor's play after a short pause — so a turn visibly plays out as "your move, then the wild
-creature's move" rather than both landing at once.
+that genuinely restores HP or grants a level: it opens a sheet of the medicine/Kinnie items you're
+carrying, consumes one, and either heals the active creature by that item's flat `healAmount` (see
+4.3 — Pastizz/Qassata/Ftira biz-Zejt are 15/40/80 HP, not a percentage) or, for a Kinnie, bumps its
+level by 1 (recomputing stats via `effectiveStats` and partially topping up HP the same way a normal
+level-up does) — either way this costs the turn, matching how throwing a ball or switching does.
+Each turn is still resolved atomically by the engine (`BattleStateMachine.submitActions`), but is
+*revealed* to the player in two sequential beats — the faster actor's line and animation play
+immediately, the slower actor's play after a short pause — so a turn visibly plays out as "your move,
+then the wild creature's move" rather than both landing at once. Defeating or catching a wild
+creature also rolls a 10% chance to drop a **Kinnie** (never sold, drop-only — see 4.3), noted in the
+Result Screen and the battle log.
 
 **Levels/XP**: starters begin at level 5 (`STARTER_STARTING_LEVEL`), defeating a wild creature grants
 XP and gold (`src/game/progression.ts`), and stats scale with level via `effectiveStats()` rather
@@ -257,7 +286,11 @@ than staying flat. Catching adds a real party member (`src/game/party.ts`), whic
 ("seen"/"caught" tracking), and Creature Detail (stats, moves, HP, XP-to-next-level) all read from
 the same `zustand` store (`src/state/gameStore.ts`) — no separate mock data path for these screens.
 Party and Creature Detail also expose a **Release** action (with an inline "are you sure?" confirm
-step, no native alert) for any party member as long as it isn't your last one.
+step, no native alert) for any party member as long as it isn't your last one. Creature Detail also
+has its own **Use Item** button — the same heal/level-up items usable in battle are usable here too,
+outside of battle, via `gameStore.useItemOnPartyMember` (which is how a fainted party member can be
+healed back up at all, since there's no separate Revive item and Battle's Use Item only ever touches
+whichever creature is currently active).
 Each combatant panel shows a generated `CreatureAvatar` (type-colored token, no illustrated art) with
 lunge/hit/faint/heal/crux-glow/catch-wobble/flee animations plus a hit-flash tint on big hits.
 The Result Screen shows win/lose/caught/fled plus gold and XP earned (and a level-up notice) — still
@@ -286,9 +319,10 @@ zone, not the species pool, since there's no real per-zone spawn table yet.
 
 ### 4.3 Maltese Cultural Touches (flavor layer, non-mechanical unless noted)
 
-- **Pastizz** (formerly "Pastizzi") — consumable medicine, restores 20% of max HP in battle (mechanical, via the Battle View's Use Item button).
-- **Qassata** — consumable medicine, restores 50% of max HP in battle. Shop-only, not in the starting Bag.
-- **Ftira biz-Zejt** — consumable medicine, restores 75% of max HP in battle. Shop-only, not in the starting Bag.
+- **Pastizz** (formerly "Pastizzi") — consumable medicine, restores a flat 15 HP (mechanical, via the Use Item button in Battle or Creature Detail).
+- **Qassata** — consumable medicine, restores a flat 40 HP. Shop-only, not in the starting Bag.
+- **Ftira biz-Zejt** — consumable medicine, restores a flat 80 HP. Shop-only, not in the starting Bag.
+- **Kinnie** — a real bittersweet Maltese soft drink, reimagined here as a rare item that instantly grants +1 level. Never sold in the Shop — the only way to get one is a 10% drop chance from defeating or catching a wild creature.
 - **"Il-Għajn" ward charm** — key item cosmetic + minor passive (e.g., +1 flee-chance stage). Renamed from the original brief's "Eye of Osiris" (Egyptian, not Maltese) to draw on the real Mediterranean evil-eye protective charm for authenticity.
 - **Festa events** — limited-time in-game festival triggers (fireworks minigame, bonus spawn rates, exclusive vendor stock) tied to the in-game calendar.
 - **Local terms** (*Mela, Ħobż, Ċaw*) — used in NPC barks/flavor text only, not menu labels, to keep navigation universally clear for a global mobile audience.

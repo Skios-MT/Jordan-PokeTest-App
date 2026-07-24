@@ -6,6 +6,8 @@ import { useGameStore } from "../state/gameStore";
 import { getMap, isWalkable, isEncounterTile, isExitTile, type TileType } from "../game/mapData";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { HoverTip } from "./components/HoverTip";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -23,10 +25,13 @@ const DIRECTION_DELTA: Record<Direction, { dRow: number; dCol: number; glyph: st
   right: { dRow: 0, dCol: 1, glyph: "▶" },
 };
 
+/** Dark Grass is deliberately a world apart from Path in both hue and value —
+ * a near-black, saturated green vs. a warm, light sandy tan — so the one tile
+ * type that can trigger an encounter never reads as "maybe just more path." */
 const TILE_COLORS: Record<TileType, string> = {
   tree: "#0b2a1a",
-  path: "#4a4030",
-  grass: "#1f5c3a",
+  path: "#9c8a6b",
+  grass: "#0c2e1a",
   exit: "#7a5c2e",
 };
 
@@ -69,9 +74,10 @@ export function MapScreen({ navigation, route }: Props) {
 
       if (isExitTile(map, next.row, next.col) && map.exitTo) {
         setCurrentZone(map.exitTo);
-        // push (not navigate): guarantees a fresh Map instance for the new
-        // zone rather than reusing this one's local position state.
-        navigation.push("Map", { zoneId: map.exitTo });
+        // reset (not push): Map is the app's default/root screen, so moving
+        // to a new zone replaces the stack's root with a fresh Map instance
+        // for that zone rather than growing an ever-longer push chain.
+        navigation.reset({ index: 0, routes: [{ name: "Map", params: { zoneId: map.exitTo } }] });
         return;
       }
 
@@ -81,11 +87,21 @@ export function MapScreen({ navigation, route }: Props) {
     });
   }
 
+  useKeyboardShortcuts({
+    ArrowUp: () => move("up"),
+    ArrowDown: () => move("down"),
+    ArrowLeft: () => move("left"),
+    ArrowRight: () => move("right"),
+    b: () => navigation.navigate("Bag"),
+    p: () => navigation.navigate("Party"),
+    m: () => navigation.navigate("Home"),
+  });
+
   return (
     <ScreenBackground style={styles.container}>
       <Text style={styles.title}>{map.zoneName}</Text>
       <Text style={styles.subtitle}>
-        Walk into the tall grass — wild creatures lurk there.
+        Walk into the dark grass — wild creatures lurk there, nowhere else.
         {map.exitTo ? " The lit path leads onward." : " This is as far as the path goes for now."}
       </Text>
 
@@ -94,7 +110,9 @@ export function MapScreen({ navigation, route }: Props) {
           {map.rows.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
               {row.map((tile, colIndex) => (
-                <View key={colIndex} style={[styles.tile, { backgroundColor: TILE_COLORS[tile] }]} />
+                <View key={colIndex} style={[styles.tile, { backgroundColor: TILE_COLORS[tile] }]}>
+                  {tile === "grass" && <Text style={styles.grassGlyph}>᛭</Text>}
+                </View>
               ))}
             </View>
           ))}
@@ -124,7 +142,9 @@ export function MapScreen({ navigation, route }: Props) {
         </Pressable>
       </View>
 
-      <PrimaryButton testID="back-button" label="Back to Home" variant="secondary" onPress={() => navigation.popToTop()} />
+      <HoverTip text="Open the Home menu for Party, Codex, Bag, and Shop. Keyboard: arrows to move, B for Bag, P for Party, M for this menu.">
+        <PrimaryButton testID="menu-button" label="Menu" variant="secondary" onPress={() => navigation.navigate("Home")} />
+      </HoverTip>
     </ScreenBackground>
   );
 }
@@ -165,6 +185,12 @@ const styles = StyleSheet.create({
     height: TILE_SIZE,
     borderWidth: 0.5,
     borderColor: "rgba(0,0,0,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  grassGlyph: {
+    color: "rgba(90, 200, 140, 0.55)",
+    fontSize: 18,
   },
   avatar: {
     position: "absolute",

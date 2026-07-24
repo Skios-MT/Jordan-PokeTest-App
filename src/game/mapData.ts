@@ -18,6 +18,12 @@ const LEGEND: Record<string, TileType> = {
 };
 
 function parseMap(raw: string[], zoneId: string, zoneName: string, exitTo: string | null): TileMap {
+  const width = raw[0]?.length ?? 0;
+  for (const rowStr of raw) {
+    if (rowStr.length !== width) {
+      throw new Error(`Map "${zoneId}": all rows must be the same length (expected ${width}, got ${rowStr.length})`);
+    }
+  }
   let playerStart = { row: 0, col: 0 };
   const rows: TileType[][] = raw.map((rowStr, rowIndex) =>
     rowStr.split("").map((ch, colIndex) => {
@@ -37,35 +43,46 @@ function parseMap(raw: string[], zoneId: string, zoneName: string, exitTo: strin
  * weaker zone into progressively stronger ones. Real per-species spawn
  * tables per zone still aren't built (see encounterTable.ts); only the
  * wild-level range shifts per zone (see zones.ts).
+ *
+ * Each zone is a distinct irregular shape/size (not a uniform 7x7 square) —
+ * trees carve the outer silhouette as well as blocking movement, so the
+ * walkable footprint itself reads as an organic blob, a pier, or a winding
+ * cave rather than a plain rectangle. All rows in a given raw array must
+ * still be equal length (a rectangular char grid), but the walkable area
+ * inside it doesn't have to be.
  */
 const MELITA_WOODS_RAW = [
-  "TTTTTTT",
-  "T.GGG.T",
-  "T.G.G.T",
-  "T..P..E",
-  "T.G.G.T",
-  "T.GGG.T",
-  "TTTTTTT",
+  "TTTTTTTTT",
+  "TTT...TTT",
+  "TT.GGG.TT",
+  "T..GGG..T",
+  "P.GGGGG.E",
+  "T..GGG..T",
+  "TT.GGG.TT",
+  "TTT...TTT",
+  "TTTTTTTTT",
 ];
 
 const LUZZU_HARBOUR_RAW = [
-  "TTTTTTT",
-  "T.....T",
-  "T.GGG.T",
-  "P.G.G.E",
-  "T.GGG.T",
-  "T.....T",
-  "TTTTTTT",
+  "TTTTTTTTTTT",
+  "T.....TTTTT",
+  "T.GGG.TTTTT",
+  "P.GGG.....E",
+  "T.GGG.TTTTT",
+  "T.....TTTTT",
+  "TTTTTTTTTTT",
 ];
 
 const AZURE_CAVERNS_RAW = [
-  "TTTTTTT",
-  "T.GGG.T",
-  "T.GGG.T",
-  "P.GGG.T",
-  "T.GGG.T",
-  "T.GGG.T",
-  "TTTTTTT",
+  "TTTTTTTTT",
+  "TPGGG.TTT",
+  "TT..G.TTT",
+  "TTT.GGG.T",
+  "TTT.G..TT",
+  "T.GGG.TTT",
+  "T.G..TTTT",
+  "T.GGG.TTT",
+  "TTTTTTTTT",
 ];
 
 export const MAPS: Record<string, TileMap> = {

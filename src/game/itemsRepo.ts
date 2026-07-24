@@ -32,9 +32,9 @@ export function purchasableItems(): ItemData[] {
   return ITEMS.filter((item) => item.price !== undefined);
 }
 
-/** Medicine items with a battle heal effect, i.e. usable via the Battle "Use Item" button. */
-export function healingItems(): ItemData[] {
-  return ITEMS.filter((item) => item.healPercent !== undefined);
+/** Items with a "Use Item" effect (heal or level-up) — usable via the Use Item button, in or out of battle. */
+export function usableItems(): ItemData[] {
+  return ITEMS.filter((item) => item.effect !== undefined);
 }
 
 /** Highest catch-multiplier ball the player currently has at least one of. */

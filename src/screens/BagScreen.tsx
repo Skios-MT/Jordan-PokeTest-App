@@ -7,6 +7,7 @@ import { ITEM_CATEGORIES, itemsByCategory } from "../game/itemsRepo";
 import type { ItemCategory } from "../data/schemas";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
+import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Bag">;
@@ -14,6 +15,8 @@ type Props = NativeStackScreenProps<RootStackParamList, "Bag">;
 export function BagScreen({ navigation }: Props) {
   const inventory = useGameStore((s) => s.inventory);
   const [category, setCategory] = useState<ItemCategory>("balls");
+
+  useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
   const items = itemsByCategory(category);
 
@@ -45,6 +48,10 @@ export function BagScreen({ navigation }: Props) {
             {item.catchMultiplier && (
               <Text style={styles.itemMeta}>Catch multiplier: {item.catchMultiplier.toFixed(1)}x</Text>
             )}
+            {item.effect === "heal" && item.healAmount && (
+              <Text style={styles.itemMeta}>Restores {item.healAmount} HP</Text>
+            )}
+            {item.effect === "level_up" && <Text style={styles.itemMeta}>Instantly grants +1 level</Text>}
           </View>
         ))}
         {items.length === 0 && <Text style={styles.empty}>Nothing here yet.</Text>}
