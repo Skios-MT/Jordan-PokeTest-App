@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
-import { getMap, isWalkable, isEncounterTile, isExitTile, type TileType } from "../game/mapData";
+import { getMap, isWalkable, isEncounterTile, isExitTile, isHealTile, type TileType } from "../game/mapData";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { HoverTip } from "./components/HoverTip";
@@ -15,6 +15,10 @@ type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 const TILE_SIZE = 44;
 /** Base 0.15, bumped 30% per request. */
 const ENCOUNTER_CHANCE = 0.195;
+/** Screen-flash transition before cutting to Battle — a burst of quick flashes,
+ * matching the classic "surprise encounter" screen-flash from the mainline games. */
+const ENCOUNTER_FLASH_SEQUENCE = [1, 0, 1, 0, 1, 0, 1];
+const ENCOUNTER_FLASH_STEP_MS = 90;
 
 type Direction = "up" | "down" | "left" | "right";
 
@@ -33,11 +37,13 @@ const TILE_COLORS: Record<TileType, string> = {
   path: "#9c8a6b",
   grass: "#0c2e1a",
   exit: "#7a5c2e",
+  heal: "#2e5c8a",
 };
 
 export function MapScreen({ navigation, route }: Props) {
   const map = getMap(route.params.zoneId);
   const setCurrentZone = useGameStore((s) => s.setCurrentZone);
+  const healFaintedPartyMembers = useGameStore((s) => s.healFaintedPartyMembers);
 
   const [position, setPosition] = useState(map.playerStart);
   const [facing, setFacing] = useState<Direction>("down");
@@ -50,6 +56,7 @@ export function MapScreen({ navigation, route }: Props) {
       y: map.playerStart.row * TILE_SIZE,
     })
   ).current;
+  const encounterFlash = useRef(new Animated.Value(0)).current;
 
   function move(direction: Direction) {
     if (busy) return;
@@ -70,8 +77,6 @@ export function MapScreen({ navigation, route }: Props) {
       duration: 150,
       useNativeDriver: false, // animating a plain View position, not a native-driver-eligible property
     }).start(() => {
-      setBusy(false);
-
       if (isExitTile(map, next.row, next.col) && map.exitTo) {
         setCurrentZone(map.exitTo);
         // reset (not push): Map is the app's default/root screen, so moving
@@ -81,9 +86,32 @@ export function MapScreen({ navigation, route }: Props) {
         return;
       }
 
-      if (isEncounterTile(map, next.row, next.col) && Math.random() < ENCOUNTER_CHANCE) {
-        navigation.navigate("Battle");
+      if (isHealTile(map, next.row, next.col)) {
+        const healedCount = healFaintedPartyMembers();
+        setMessage(
+          healedCount > 0
+            ? `The Healing Center revived ${healedCount} fainted creature${healedCount === 1 ? "" : "s"}!`
+            : "Nobody in your party needs reviving right now."
+        );
+        setBusy(false);
+        return;
       }
+
+      if (isEncounterTile(map, next.row, next.col) && Math.random() < ENCOUNTER_CHANCE) {
+        // Screen-flash transition before cutting to Battle — busy stays true
+        // for the whole sequence so the player can't walk away mid-flash.
+        const flashAnimations = ENCOUNTER_FLASH_SEQUENCE.map((toValue) =>
+          Animated.timing(encounterFlash, { toValue, duration: ENCOUNTER_FLASH_STEP_MS, useNativeDriver: false })
+        );
+        Animated.sequence(flashAnimations).start(() => {
+          encounterFlash.setValue(0);
+          setBusy(false);
+          navigation.navigate("Battle");
+        });
+        return;
+      }
+
+      setBusy(false);
     });
   }
 
@@ -101,7 +129,8 @@ export function MapScreen({ navigation, route }: Props) {
     <ScreenBackground style={styles.container}>
       <Text style={styles.title}>{map.zoneName}</Text>
       <Text style={styles.subtitle}>
-        Walk into the dark grass — wild creatures lurk there, nowhere else.
+        Walk into the dark grass — wild creatures lurk there, nowhere else. The Healing Center (✚)
+        revives any fainted party members.
         {map.exitTo ? " The lit path leads onward." : " This is as far as the path goes for now."}
       </Text>
 
@@ -112,6 +141,7 @@ export function MapScreen({ navigation, route }: Props) {
               {row.map((tile, colIndex) => (
                 <View key={colIndex} style={[styles.tile, { backgroundColor: TILE_COLORS[tile] }]}>
                   {tile === "grass" && <Text style={styles.grassGlyph}>᛭</Text>}
+                  {tile === "heal" && <Text style={styles.healGlyph}>✚</Text>}
                 </View>
               ))}
             </View>
@@ -119,6 +149,11 @@ export function MapScreen({ navigation, route }: Props) {
           <Animated.View testID="player-avatar" style={[styles.avatar, { transform: anim.getTranslateTransform() }]}>
             <Text style={styles.avatarGlyph}>{DIRECTION_DELTA[facing].glyph}</Text>
           </Animated.View>
+          <Animated.View
+            testID="encounter-flash"
+            pointerEvents="none"
+            style={[styles.encounterFlash, { opacity: encounterFlash }]}
+          />
         </View>
       </View>
 
@@ -191,6 +226,19 @@ const styles = StyleSheet.create({
   grassGlyph: {
     color: "rgba(90, 200, 140, 0.55)",
     fontSize: 18,
+  },
+  healGlyph: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  encounterFlash: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#ffffff",
   },
   avatar: {
     position: "absolute",

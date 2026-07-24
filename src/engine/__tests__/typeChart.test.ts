@@ -40,4 +40,27 @@ describe("type chart", () => {
     expect(getSingleTypeMultiplier("Fire", "Ground")).toBe(1);
     expect(getTypeMultiplier("Fire", ["Steel", "Ground"])).toBe(2);
   });
+
+  // Regression coverage for a reported bug: the chart originally had no "resists"
+  // (0.5x) column at all, so a Water-type never actually resisted Fire moves.
+  it("applies resist (0.5x) relationships — Fire is resisted by Water, Grass is resisted by Fire", () => {
+    expect(getSingleTypeMultiplier("Fire", "Water")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Grass", "Fire")).toBe(0.5);
+  });
+
+  it("Water resists Water/Grass/Dragon; Grass resists Fire/Grass/Poison/Flying/Bug/Dragon/Steel", () => {
+    expect(getSingleTypeMultiplier("Water", "Water")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Water", "Grass")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Water", "Dragon")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Grass", "Grass")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Grass", "Poison")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Grass", "Flying")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Grass", "Bug")).toBe(0.5);
+    expect(getSingleTypeMultiplier("Grass", "Steel")).toBe(0.5);
+  });
+
+  it("a Fire attacker vs a Water defender nets out below neutral in the full damage formula's type stage", () => {
+    // Fire vs Water dual-type-free case: no weakness anywhere to cancel the resist out.
+    expect(getTypeMultiplier("Fire", ["Water"])).toBeLessThan(1);
+  });
 });

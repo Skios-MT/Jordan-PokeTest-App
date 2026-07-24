@@ -87,10 +87,18 @@ Round down to nearest integer at each multiplication stage to avoid floating dri
 
 Stored as a numeric multiplier matrix (`src/data/type_chart.json`), not nested if/else — this is the single highest-leverage data file for balance iteration.
 
-Two implementation notes/gaps carried over from this table as authored:
+`Ice`, `Bug`, `Poison`, `Normal`, `Dark`, and `Dragon` are referenced above only as attack/defense targets (e.g. "Immune to Poison", "weak vs Bug"), not as one of the 12 named types with their own row in this table — but the JSON matrix's actual data is the complete, standard 18-type effectiveness chart (all 18 types have a real row), extending this table's Chivalry/Antiquity-flavored 12 with the newer types on the same 0/0.5/1/2 model.
 
-- `Ice`, `Bug`, `Poison`, `Normal`, `Dark`, and `Dragon` are referenced above only as attack/defense targets (e.g. "Immune to Poison", "weak vs Bug"), not as one of the 12 named types with their own row. The JSON matrix includes all 18 types that appear anywhere in the table, but the 6 reference-only types default to a neutral (1x) offensive row until a creature/move is actually authored with one of those types.
-- The table only defines "Strong vs" (2x), "Weak vs" (the listed type takes 2x from this type), and "Immune to" (0x) — there's no "Resists" column, so the initial `type_chart.json` has no 0.5 entries yet even though the damage formula (1.3) supports them. Resistances are a follow-up balance-data task, not something inferred here.
+**Resists (0.5x) are implemented**, matching the mainline games (Pokemon Yellow's mechanics as the baseline): e.g. Fire deals 0.5x to Water, Grass deals 0.5x to Fire, Water deals 0.5x to Water/Grass/Dragon. An earlier revision of `type_chart.json` omitted every resist relationship entirely (every non-listed pair defaulted to neutral 1x), which silently broke the intended "Water beats Fire" advantage in practice — a Fire-type attacker took no penalty at all against a Water-type defender. Fixed; see `src/engine/__tests__/typeChart.test.ts` for regression coverage of exactly this case.
+
+### 1.3a Accuracy & Misses
+
+```
+hit_chance = min(1, (move.accuracy / 100) * accuracy_stage_multiplier / evasion_stage_multiplier)
+miss       = random() >= hit_chance
+```
+
+A move with `accuracy >= 100` is always a certain hit and never rolls — not just an optimization, this keeps the engine's deterministic test `randomSource` from ever "missing" a should-never-miss move on an unlucky boundary roll. Per the "stronger attack, lower accuracy" brief, `src/data/moves.json`'s movepool is tiered so the tradeoff is real: Tackle (40 power) is a certain hit at 100 accuracy, the elemental signature moves (55 power) sit at 90 accuracy, and Rock Throw (65 power, the hardest-hitting move in the current pool) drops to 80 accuracy.
 
 ### 1.5 Crux Aura — Regional Mechanic
 
@@ -260,6 +268,16 @@ checks for the `"grass"` tile type only; Path and Exit tiles never roll an encou
 Dark Grass tile rolls a 19.5% chance (`ENCOUNTER_CHANCE` in `MapScreen.tsx` — bumped 30% from an
 original 15% baseline) to trigger a wild battle drawn from `src/game/encounterTable.ts`'s weighted
 pool, whose level range is set per zone in `zones.ts` — later zones spawn stronger wild creatures.
+Triggering an encounter plays a screen-flash transition (a quick burst of white flashes, the classic
+"surprise encounter" cut from the mainline games — `ENCOUNTER_FLASH_SEQUENCE` in `MapScreen.tsx`)
+before navigating into Battle View, instead of cutting instantly.
+
+Each zone also has exactly one **Healing Center** tile (✚, distinct blue) reachable from the entrance
+without crossing Dark Grass. Stepping onto it fully revives every currently-KO'd (`currentHp <= 0`)
+party member to max HP via `gameStore.healFaintedPartyMembers()` — deliberately *only* those, not a
+full-party top-up like the mainline games' Pokemon Centers; a conscious-but-damaged party member is
+left as-is. This is the mechanism for recovering from a full-party blackout without needing to catch a
+new lead or grind currency for medicine.
 
 Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
 action (`src/engine/catching.ts` wired to the Bag's ball items), randomized wild encounters, **party
@@ -273,12 +291,21 @@ carrying, consumes one, and either heals the active creature by that item's flat
 4.3 — Pastizz/Qassata/Ftira biz-Zejt are 15/40/80 HP, not a percentage) or, for a Kinnie, bumps its
 level by 1 (recomputing stats via `effectiveStats` and partially topping up HP the same way a normal
 level-up does) — either way this costs the turn, matching how throwing a ball or switching does.
-Each turn is still resolved atomically by the engine (`BattleStateMachine.submitActions`), but is
-*revealed* to the player in two sequential beats — the faster actor's line and animation play
-immediately, the slower actor's play after a short pause — so a turn visibly plays out as "your move,
-then the wild creature's move" rather than both landing at once. Defeating or catching a wild
-creature also rolls a 10% chance to drop a **Kinnie** (never sold, drop-only — see 4.3), noted in the
-Result Screen and the battle log.
+
+**Turns resolve genuinely one attacker at a time.** `BattleStateMachine.submitActions` takes an
+optional `onActionResolved` callback that fires synchronously, once per actor that actually got to
+act, in real speed/priority order (`src/engine/battleManager.ts`) — exactly one call if the faster
+actor's hit ends the battle before the slower one can move, matching the mainline games (the second
+actor never "acts" at all in that case, not just visually skipped). Battle View's reveal is driven
+entirely off this callback rather than a separately-computed guess at turn order, so what's shown can
+never drift from what the engine actually did; each beat plays with its own delay before the next,
+so a turn always reads as "your creature attacks, then — if it's still standing — the wild creature
+attacks," never both at once. The battle log now shows the real numbers behind each hit: `"Dealt N
+damage!"`, `"A critical hit!"`, `"It's super effective!"` / `"It's not very effective..."` / `"It had
+no effect..."` (from the real type multiplier), a fainted-this-hit line, or `"But it missed!"` for a
+move that failed its accuracy roll (see 1.3a) — not just the bare "X used Y" announcement. Defeating
+or catching a wild creature also rolls a 10% chance to drop a **Kinnie** (never sold, drop-only — see
+4.3), noted in the Result Screen and the battle log.
 
 **Levels/XP**: starters begin at level 5 (`STARTER_STARTING_LEVEL`), defeating a wild creature grants
 XP and gold (`src/game/progression.ts`), and stats scale with level via `effectiveStats()` rather

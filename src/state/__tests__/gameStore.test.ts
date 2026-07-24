@@ -97,4 +97,25 @@ describe("gameStore", () => {
       expect(useGameStore.getState().inventory.pastizz).toBe(3);
     });
   });
+
+  describe("healFaintedPartyMembers", () => {
+    it("fully revives every KO'd member to max HP and leaves conscious ones untouched", () => {
+      const fainted = { ...makeMember("a"), currentHp: 0 };
+      const alive = { ...makeMember("b"), currentHp: 20 }; // not full (max is 110), should stay at 20
+      useGameStore.setState({ party: [fainted, alive] });
+
+      const healedCount = useGameStore.getState().healFaintedPartyMembers();
+
+      expect(healedCount).toBe(1);
+      expect(useGameStore.getState().party[0].currentHp).toBe(110);
+      expect(useGameStore.getState().party[1].currentHp).toBe(20);
+    });
+
+    it("returns 0 and leaves the party untouched when nobody is fainted", () => {
+      useGameStore.setState({ party: [makeMember("a"), makeMember("b")] });
+      const healedCount = useGameStore.getState().healFaintedPartyMembers();
+      expect(healedCount).toBe(0);
+      expect(useGameStore.getState().party.every((m) => m.currentHp === 20)).toBe(true);
+    });
+  });
 });

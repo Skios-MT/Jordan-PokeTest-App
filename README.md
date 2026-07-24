@@ -49,14 +49,20 @@ Shop all reachable from Map/Home, matching spec 4.1.
   with a 4-directional D-pad (or arrow keys), a player avatar, and one exit
   tile leading to the next (stronger) zone. Walking onto **Dark Grass**
   (visually distinct from Path — near-black green vs. warm tan, plus a
-  texture glyph) has a 19.5% chance to trigger a wild battle; Path and Exit
-  tiles never do.
+  texture glyph) has a 19.5% chance to trigger a wild battle (Path and Exit
+  tiles never do), which plays a screen-flash transition before cutting to
+  Battle View. Each zone also has one **Healing Center** (✚) tile that fully
+  revives any KO'd party members on the spot.
 - **Battle View**: pick a move, Invoke Crux, throw a ball to catch the wild
   creature, switch party members (voluntarily via the Party sheet, or for
   free when your active creature faints and a reserve remains), use an item
   to heal or level up, or run away — all driven by the real engine, not mock
-  data. Each turn resolves atomically but reveals in two beats (your action,
-  then the wild creature's) for a clearer turn-based feel. Wild encounters
+  data. Turns resolve genuinely one attacker at a time in real speed order
+  (an engine callback fires once per actor that actually acts, so a one-hit
+  KO correctly shows only one attack, not two), moves can miss based on
+  accuracy (higher-power moves have lower accuracy), and the log shows the
+  real numbers: damage dealt, crits, and type-effectiveness commentary
+  ("It's super effective!" / "It's not very effective..."). Wild encounters
   are drawn from a weighted encounter table whose level range increases per
   zone. Winning or catching grants gold/XP and a 10% chance to drop a rare
   **Kinnie** item; each combatant shows a generated, type-colored avatar with

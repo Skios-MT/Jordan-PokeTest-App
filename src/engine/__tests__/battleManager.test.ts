@@ -1,6 +1,8 @@
 import {
   BattleStateMachine,
   resolveTurn,
+  resolveAction,
+  rollHit,
   canAct,
   applyFlinch,
   tickEndOfTurn,
@@ -95,6 +97,54 @@ describe("checkWin", () => {
   });
 });
 
+describe("rollHit (accuracy/miss)", () => {
+  it("never misses a >=100 accuracy move regardless of the random roll", () => {
+    const actor = makeCreature();
+    const target = makeCreature();
+    const move = makeMove({ accuracy: 100 });
+    expect(rollHit(actor, target, move, () => 1)).toBe(true); // even a boundary roll of 1
+    expect(rollHit(actor, target, move, () => 0.9999)).toBe(true);
+  });
+
+  it("misses a <100 accuracy move when the roll is above the hit chance", () => {
+    const actor = makeCreature();
+    const target = makeCreature();
+    const move = makeMove({ accuracy: 80 });
+    expect(rollHit(actor, target, move, () => 0.9)).toBe(false); // 0.9 >= 0.8 -> miss
+    expect(rollHit(actor, target, move, () => 0.1)).toBe(true); // 0.1 < 0.8 -> hit
+  });
+});
+
+describe("resolveAction outcome (hit/miss/damage/crit surfaced to callers)", () => {
+  it("reports a miss with zero damage when the move fails its accuracy check", () => {
+    const ctx = makeContext();
+    const move = makeMove({ id: "risky", accuracy: 50 });
+    const outcome = resolveAction(
+      ctx,
+      { kind: "move", actorId: "player", moveId: "risky" },
+      () => move,
+      () => 0.9 // 0.9 >= 0.5 -> miss
+    );
+    expect(outcome.hit).toBe(false);
+    expect(outcome.damage).toBe(0);
+    expect(ctx.enemyActive.currentHp).toBe(ctx.enemyActive.stats.hp); // untouched
+  });
+
+  it("reports damage dealt and crit flag on a hit", () => {
+    const ctx = makeContext();
+    const move = makeMove({ id: "splash", accuracy: 100, power: 60 });
+    const outcome = resolveAction(
+      ctx,
+      { kind: "move", actorId: "player", moveId: "splash" },
+      () => move,
+      () => 1 // no crit (1 is not < BASE_CRIT_CHANCE), top of damage-roll range
+    );
+    expect(outcome.hit).toBe(true);
+    expect(outcome.damage).toBeGreaterThan(0);
+    expect(outcome.crit).toBe(false);
+  });
+});
+
 describe("resolveTurn", () => {
   it("applies damage from both actions and advances the turn count", () => {
     const ctx = makeContext();
@@ -177,6 +227,47 @@ describe("BattleStateMachine", () => {
 
     expect(winner).toBe("player");
     expect(fsm.getState()).toBe("BATTLE_END");
+  });
+
+  describe("submitActions onActionResolved callback", () => {
+    it("fires once per actor, in real speed order, for a normal turn", () => {
+      const ctx = makeContext({
+        playerActive: makeCreature({ id: "player", types: ["Water"], stats: { hp: 100, atk: 80, def: 80, spatk: 80, spdef: 80, speed: 100 } }),
+        enemyActive: makeCreature({ id: "enemy", types: ["Fire"], stats: { hp: 100, atk: 80, def: 80, spatk: 80, spdef: 80, speed: 50 } }),
+      });
+      const fsm = new BattleStateMachine(ctx, getMove, () => 1);
+      fsm.start();
+
+      const actorIds: string[] = [];
+      fsm.submitActions(
+        { kind: "move", actorId: "player", moveId: "splash" },
+        { kind: "move", actorId: "enemy", moveId: "splash" },
+        (outcome) => actorIds.push(outcome.actor.id)
+      );
+
+      // Player is faster, so it should always be reported as acting first.
+      expect(actorIds).toEqual(["player", "enemy"]);
+    });
+
+    it("fires exactly once when the faster actor's hit ends the battle", () => {
+      const ctx = makeContext({
+        enemyActive: makeCreature({ id: "enemy", types: ["Fire"], currentHp: 1, stats: { hp: 1, atk: 1, def: 1, spatk: 1, spdef: 1, speed: 1 } }),
+        playerActive: makeCreature({ id: "player", types: ["Water"], stats: { hp: 100, atk: 999, def: 1, spatk: 1, spdef: 1, speed: 999 } }),
+      });
+      const fsm = new BattleStateMachine(ctx, getMove, () => 1);
+      fsm.start();
+
+      const outcomes: string[] = [];
+      fsm.submitActions(
+        { kind: "move", actorId: "player", moveId: "splash" },
+        { kind: "move", actorId: "enemy", moveId: "splash" },
+        (outcome) => outcomes.push(outcome.actor.id)
+      );
+
+      // The enemy's action never actually resolves, so the callback never fires for it —
+      // the UI reveal is driven off exactly this callback, so it can't show a beat that didn't happen.
+      expect(outcomes).toEqual(["player"]);
+    });
   });
 
   it("rejects submitActions when not in ACTION_SELECT", () => {

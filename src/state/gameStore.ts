@@ -48,6 +48,10 @@ interface GameState {
   useItemOnPartyMember: (uid: string, itemId: string) => UseItemResult;
   /** Bumps a party member's level by 1 in the store, independent of any live battle context. */
   bumpPartyMemberLevel: (uid: string) => void;
+  /** Healing Center: fully revives every KO'd (currentHp <= 0) party member to max HP.
+   * Deliberately leaves already-conscious members untouched, even if not at full HP —
+   * this is a blackout-recovery station, not a full-party top-up. Returns how many were healed. */
+  healFaintedPartyMembers: () => number;
   resetGame: () => void;
 }
 
@@ -180,6 +184,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!member) return;
     const leveled = applyLevelUp(member);
     set((state) => ({ party: state.party.map((m) => (m.uid === uid ? leveled : m)) }));
+  },
+
+  healFaintedPartyMembers: () => {
+    const { party } = get();
+    let healedCount = 0;
+    const healed = party.map((m) => {
+      if (m.currentHp > 0) return m;
+      healedCount += 1;
+      return { ...m, currentHp: partyMemberStats(m).hp };
+    });
+    if (healedCount > 0) set({ party: healed });
+    return healedCount;
   },
 
   resetGame: () =>

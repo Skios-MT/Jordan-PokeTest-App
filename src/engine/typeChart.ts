@@ -8,11 +8,11 @@ const matrix = parsed.matrix;
  * Effectiveness of a single attacking type against a single defending type.
  * Defaults to 1 (neutral) for any pair not present in the chart.
  *
- * Note: the source spec's table (section 1.4) only defines "Strong vs" (2x),
- * "Weak vs" (this type takes 2x from the listed attacker), and "Immune to" (0x)
- * relationships — there is no "Resists" column, so no pair in the initial
- * dataset currently resolves to 0.5. The damage formula supports 0.5 for when
- * resist relationships are authored in a future balance pass.
+ * The matrix is the standard 18-type effectiveness chart (0x/0.5x/1x/2x),
+ * including "resists" (0.5x) relationships — e.g. Fire deals 0.5x to Water,
+ * Grass deals 0.5x to Fire — matching how the mainline games (Pokemon
+ * Yellow's mechanics as the baseline, extended with the newer types this
+ * game also uses) actually resolve type advantage.
  */
 export function getSingleTypeMultiplier(attackType: TypeName, defenderType: TypeName): number {
   return matrix[attackType]?.[defenderType] ?? 1;

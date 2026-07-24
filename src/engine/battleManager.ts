@@ -3,6 +3,7 @@ import { calculateDamage, BASE_CRIT_CHANCE } from "./damage";
 import { sortByPriority, effectivePriority, type OrderedAction } from "./priority";
 import { activateCruxAura, getCruxStatMultiplier, isImmuneToFlinchViaCrux } from "./cruxAura";
 import { tickStatusEffects } from "./statusEffects";
+import { stageMultiplier } from "./statStages";
 
 export type BattleState =
   | "IDLE"
@@ -57,6 +58,38 @@ export function applyFlinch(target: Creature): void {
 }
 
 /**
+ * Chance a move connects, matching genre convention: accuracy is a percentage
+ * modified by the attacker's accuracy stage and the defender's evasion stage.
+ * A move with accuracy >= 100 is treated as a certain hit and never rolls —
+ * this isn't just an optimization, it keeps a deterministic randomSource
+ * (as used throughout the test suite) from ever "missing" a 100%-accuracy
+ * move on an unlucky boundary roll.
+ */
+export function rollHit(actor: Creature, target: Creature, move: Move, randomSource: () => number): boolean {
+  if (move.accuracy >= 100) return true;
+  const accuracyMultiplier = stageMultiplier(actor.statStages.accuracy) / stageMultiplier(target.statStages.evasion);
+  const hitChance = Math.min(1, Math.max(0, (move.accuracy / 100) * accuracyMultiplier));
+  return randomSource() < hitChance;
+}
+
+/** Per-action result, surfaced to callers (e.g. submitActions' onActionResolved) so the UI
+ * can report exactly what happened — hit/miss, damage dealt, crit — without re-deriving it
+ * from before/after HP snapshots. */
+export interface ActionOutcome {
+  action: BattleAction;
+  actor: Creature;
+  target?: Creature;
+  /** False only for a move that missed or an actor that couldn't act (asleep/frozen/flinched/paralyzed). */
+  hit: boolean;
+  damage: number;
+  crit: boolean;
+}
+
+function nonMoveOutcome(action: BattleAction, actor: Creature, hit: boolean): ActionOutcome {
+  return { action, actor, hit, damage: 0, crit: false };
+}
+
+/**
  * Resolves a single actor's action against the current context. Mirrors the
  * spec 5.3 boilerplate's resolveTurn loop body, but as a standalone function
  * so it can be unit tested per-action rather than only via the full FSM.
@@ -66,32 +99,43 @@ export function resolveAction(
   action: BattleAction,
   getMove: MoveResolver,
   randomSource: () => number = Math.random
-): void {
+): ActionOutcome {
   const actor = actorFor(ctx, action.actorId);
 
   if (action.kind === "invoke_crux") {
     activateCruxAura(actor);
-    return;
+    return nonMoveOutcome(action, actor, true);
   }
 
-  if (!canAct(actor, randomSource)) return;
+  if (!canAct(actor, randomSource)) {
+    return nonMoveOutcome(action, actor, false);
+  }
 
   if (action.kind === "move") {
     const target = opponentOf(ctx, actor);
     const move = getMove(action.moveId);
+
+    if (!rollHit(actor, target, move, randomSource)) {
+      return { action, actor, target, hit: false, damage: 0, crit: false };
+    }
+
     const cruxAuraMultiplier = getCruxStatMultiplier(actor, move.category === "special" ? "spatk" : "atk");
+    const isCrit = randomSource() < BASE_CRIT_CHANCE;
     const dmg = calculateDamage(actor, target, move, {
       cruxAuraMultiplier,
-      isCrit: randomSource() < BASE_CRIT_CHANCE,
+      isCrit,
       randomFactor: 0.85 + randomSource() * 0.15,
     });
     target.currentHp = Math.max(0, target.currentHp - dmg);
     if (move.statusEffect && move.statusEffect !== "none" && target.status === "none") {
       target.status = move.statusEffect;
     }
+    return { action, actor, target, hit: true, damage: dmg, crit: isCrit };
   }
+
   // switch / item / flee: same pattern (mutate ctx accordingly) — omitted, no battle-engine
   // math involved beyond what's already covered by tests for move resolution.
+  return nonMoveOutcome(action, actor, true);
 }
 
 export function tickEndOfTurn(ctx: BattleContext): void {
@@ -175,8 +219,21 @@ export class BattleStateMachine {
     this.setState("ACTION_SELECT");
   }
 
-  /** ACTION_SELECT -> PRIORITY_SORT -> ACTION_RESOLVE -> END_OF_TURN -> WIN_CHECK -> (TURN_START | BATTLE_END) */
-  submitActions(playerAction: BattleAction, enemyAction: BattleAction): Winner {
+  /**
+   * ACTION_SELECT -> PRIORITY_SORT -> ACTION_RESOLVE -> END_OF_TURN -> WIN_CHECK -> (TURN_START | BATTLE_END)
+   *
+   * `onActionResolved`, if given, fires synchronously once per action actually
+   * resolved, in true speed/priority order — exactly one call if the first
+   * actor's move ends the battle (the second actor never gets to act, same as
+   * the real games), otherwise two. This is the authoritative source for "who
+   * went first and what happened," so callers (the Battle UI) don't need to
+   * separately guess at turn order to reveal it.
+   */
+  submitActions(
+    playerAction: BattleAction,
+    enemyAction: BattleAction,
+    onActionResolved?: (outcome: ActionOutcome) => void
+  ): Winner {
     if (this.state !== "ACTION_SELECT") {
       throw new Error(`Cannot submit actions from state ${this.state}`);
     }
@@ -197,7 +254,8 @@ export class BattleStateMachine {
     this.setState("ACTION_RESOLVE");
     for (const entry of ordered) {
       if (checkWin(this.ctx)) break;
-      resolveAction(this.ctx, entry.action, this.getMove, this.randomSource);
+      const outcome = resolveAction(this.ctx, entry.action, this.getMove, this.randomSource);
+      onActionResolved?.(outcome);
     }
 
     this.setState("END_OF_TURN");

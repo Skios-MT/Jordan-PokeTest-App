@@ -10,12 +10,12 @@ import { creatureFromPartyMember, partyMemberFromParticipant, partyMemberStats }
 import { xpRewardForLevel, currencyRewardForLevel, effectiveStats } from "../game/progression";
 import { getMove } from "../game/movesRepo";
 import { pickBestAvailableBall, getItem, usableItems } from "../game/itemsRepo";
-import { BattleStateMachine, type Winner } from "../engine/battleManager";
+import { BattleStateMachine, type Winner, type ActionOutcome } from "../engine/battleManager";
 import { attemptCatch, type ContainerType } from "../engine/catching";
 import { isCruxOnCooldown, CRUX_AURA_STATUS_ID } from "../engine/cruxAura";
 import { getActiveEffect } from "../engine/statusEffects";
-import { effectivePriority, effectiveSpeed } from "../engine/priority";
-import type { BattleAction, BattleContext, Move } from "../engine/types";
+import { getTypeMultiplier } from "../engine/typeChart";
+import type { BattleAction, BattleContext, Creature } from "../engine/types";
 import type { TypeName } from "../data/schemas";
 import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
@@ -40,22 +40,14 @@ const BIG_HIT_FRACTION = 0.25;
 
 type Outcome = Winner | "caught" | "fled";
 
-/** Cosmetic-only prediction of which side acts first, so the turn can be revealed in two beats
- * matching real priority/speed order. The actual resolution still runs atomically through
- * fsm.submitActions — this never affects real damage or state, only reveal sequencing. */
-function predictFirstActor(
-  ctx: BattleContext,
-  playerAction: BattleAction,
-  enemyAction: BattleAction,
-  moveResolver: (id: string) => Move
-): "player" | "enemy" {
-  const playerPriority = effectivePriority(playerAction, playerAction.kind === "move" ? moveResolver(playerAction.moveId).basePriority : 0);
-  const enemyPriority = effectivePriority(enemyAction, enemyAction.kind === "move" ? moveResolver(enemyAction.moveId).basePriority : 0);
-  if (playerPriority !== enemyPriority) return playerPriority > enemyPriority ? "player" : "enemy";
-  const playerSpeed = effectiveSpeed(ctx.playerActive);
-  const enemySpeed = effectiveSpeed(ctx.enemyActive);
-  if (playerSpeed !== enemySpeed) return playerSpeed > enemySpeed ? "player" : "enemy";
-  return "player";
+/** One resolved action queued up for reveal, paired with the battle snapshot
+ * exactly as it stood right after that action resolved (captured synchronously
+ * inside the engine's onActionResolved callback — ctx has already moved on to
+ * reflect BOTH actions by the time reveal playback starts, so this snapshot is
+ * the only way to show HP dropping progressively, beat by beat). */
+interface RevealBeat {
+  outcome: ActionOutcome;
+  snapshotAfter: BattleSnapshot;
 }
 
 interface BattleRewards {
@@ -186,83 +178,105 @@ export function BattleScreen({ navigation }: Props) {
     });
   }
 
+  function labelForCreature(creature: Creature, playerActiveId: string): string {
+    if (creature.id === playerActiveId) {
+      return party.find((m) => m.uid === creature.id)?.displayName ?? "Your creature";
+    }
+    return `Wild ${enemy.displayName}`;
+  }
+
+  /** Extra log lines describing what a move actually did — damage dealt, a miss,
+   * crit, type effectiveness, and a faint — matching the mainline games' battle text. */
+  function resultLinesFor(outcome: ActionOutcome, playerActiveId: string): string[] {
+    if (outcome.action.kind !== "move" || !outcome.target) return [];
+    if (!outcome.hit) return ["But it missed!"];
+
+    const lines: string[] = [`Dealt ${outcome.damage} damage!`];
+    if (outcome.crit) lines.push("A critical hit!");
+
+    const move = getMove(outcome.action.moveId);
+    const multiplier = getTypeMultiplier(move.type, outcome.target.types);
+    if (multiplier > 1) lines.push("It's super effective!");
+    else if (multiplier > 0 && multiplier < 1) lines.push("It's not very effective...");
+    else if (multiplier === 0) lines.push("It had no effect...");
+
+    if (outcome.target.currentHp <= 0) lines.push(`${labelForCreature(outcome.target, playerActiveId)} fainted!`);
+    return lines;
+  }
+
   /**
-   * Resolves one full turn atomically via the engine (submitActions is
-   * synchronous), but reveals it to the player in two sequential beats —
-   * the first actor's line + animation immediately, the second actor's
-   * after a short delay — so each turn plays out as a clear "your move,
-   * then the wild creature's move" rather than both landing at once.
+   * Resolves one full turn via the engine's onActionResolved callback, which
+   * fires synchronously once per actor that actually got to act — in real
+   * speed/priority order, and only once (not twice) if the faster actor's hit
+   * ends the battle before the slower one can move. Reveal then steps through
+   * those captured beats on a delay, one attacker at a time, so a turn always
+   * plays out as genuinely sequential single-attacker turns rather than both
+   * sides landing at once.
    */
   function runTurn(playerAction: BattleAction, playerLines: string[]) {
     if (!fsm) return;
-    const ctx = fsm.getContext();
-    const prevSnapshot = snapshot;
+    const activeFsm = fsm; // re-bind so TS keeps the non-null narrowing inside the nested closures below
+    const ctx = activeFsm.getContext();
+    const playerActiveId = ctx.playerActive.id;
     const enemyMoveId = pickEnemyMoveId();
-    const enemyMove = getMove(enemyMoveId);
     const enemyAction: BattleAction = { kind: "move", actorId: ctx.enemyActive.id, moveId: enemyMoveId };
-    const enemyLine = `Wild ${enemy.displayName} used ${enemyMove.name}.`;
-    const activeName = party.find((m) => m.uid === ctx.playerActive.id)?.displayName ?? "Your creature";
 
-    const firstIsPlayer = predictFirstActor(ctx, playerAction, enemyAction, getMove) === "player";
-
-    fsm.submitActions(playerAction, enemyAction);
-    const nextSnapshot = snapshotFrom(ctx);
+    const beats: RevealBeat[] = [];
+    activeFsm.submitActions(playerAction, enemyAction, (outcome) => {
+      beats.push({ outcome, snapshotAfter: snapshotFrom(ctx) });
+    });
 
     setResolving(true);
 
-    const firstLines = firstIsPlayer ? playerLines : [enemyLine];
-    if (firstIsPlayer) playerAnim.windUp();
-    else enemyAnim.windUp();
-    pushLog(firstLines);
-    if (firstIsPlayer) playerAnim.lunge();
-    else enemyAnim.lunge();
-
-    setTimeout(() => {
-      const secondLines = firstIsPlayer ? [enemyLine] : playerLines;
-      pushLog(secondLines);
-      if (firstIsPlayer) enemyAnim.windUp();
-      else playerAnim.windUp();
-
-      const enemyDamage = prevSnapshot ? prevSnapshot.enemyHp - nextSnapshot.enemyHp : 0;
-      const playerDamage = prevSnapshot ? prevSnapshot.playerHp - nextSnapshot.playerHp : 0;
-
-      if (enemyDamage > 0) {
-        enemyAnim.hit(enemyDamage >= nextSnapshot.enemyMaxHp * BIG_HIT_FRACTION ? "big" : "small");
-      } else if (firstIsPlayer) {
-        enemyAnim.lunge();
+    function revealBeat(index: number) {
+      if (index >= beats.length) {
+        finalizeTurn();
+        return;
       }
-      if (nextSnapshot.enemyHp <= 0) enemyAnim.faint();
+      const { outcome, snapshotAfter } = beats[index];
+      const isPlayer = outcome.actor.id === playerActiveId;
+      const actingAnim = isPlayer ? playerAnim : enemyAnim;
+      const reactingAnim = isPlayer ? enemyAnim : playerAnim;
 
-      if (playerDamage > 0) {
-        playerAnim.hit(playerDamage >= nextSnapshot.playerMaxHp * BIG_HIT_FRACTION ? "big" : "small");
-      } else if (!firstIsPlayer) {
-        playerAnim.lunge();
+      const announceLines = isPlayer ? playerLines : [`Wild ${enemy.displayName} used ${getMove(enemyMoveId).name}.`];
+      pushLog([...announceLines, ...resultLinesFor(outcome, playerActiveId)]);
+
+      if (outcome.action.kind === "move") {
+        actingAnim.windUp();
+        actingAnim.lunge();
       }
-      if (nextSnapshot.playerHp <= 0) playerAnim.faint();
+      if (outcome.hit && outcome.target) {
+        if (outcome.damage > 0) {
+          reactingAnim.hit(outcome.damage >= outcome.target.stats.hp * BIG_HIT_FRACTION ? "big" : "small");
+        }
+        if (outcome.target.currentHp <= 0) reactingAnim.faint();
+      }
 
-      const faintLines: string[] = [];
-      if (nextSnapshot.enemyHp <= 0) faintLines.push(`Wild ${enemy.displayName} fainted!`);
-      if (nextSnapshot.playerHp <= 0) faintLines.push(`${activeName} fainted!`);
-      if (faintLines.length) pushLog(faintLines);
+      setSnapshot(snapshotAfter);
+      setTimeout(() => revealBeat(index + 1), TURN_BEAT_DELAY_MS);
+    }
 
-      setSnapshot(nextSnapshot);
-      updatePartyMemberHp(ctx.playerActive.id, nextSnapshot.playerHp);
+    function finalizeTurn() {
+      const finalSnapshot = snapshotFrom(ctx);
+      updatePartyMemberHp(playerActiveId, finalSnapshot.playerHp);
       setResolving(false);
 
-      if (fsm.getState() !== "BATTLE_END") return;
+      if (activeFsm.getState() !== "BATTLE_END") return;
 
-      if (nextSnapshot.enemyHp <= 0) {
+      if (finalSnapshot.enemyHp <= 0) {
         finishBattle("player", ctx);
         return;
       }
 
-      const reserves = party.filter((m) => m.uid !== ctx.playerActive.id && m.currentHp > 0);
+      const reserves = party.filter((m) => m.uid !== playerActiveId && m.currentHp > 0);
       if (reserves.length > 0) {
         setForcedSwitchPending(true);
       } else {
         finishBattle("enemy", ctx);
       }
-    }, TURN_BEAT_DELAY_MS);
+    }
+
+    revealBeat(0);
   }
 
   function switchTo(uid: string, { forced }: { forced: boolean }) {

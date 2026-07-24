@@ -1,4 +1,4 @@
-export type TileType = "tree" | "path" | "grass" | "exit";
+export type TileType = "tree" | "path" | "grass" | "exit" | "heal";
 
 export interface TileMap {
   zoneId: string;
@@ -15,6 +15,7 @@ const LEGEND: Record<string, TileType> = {
   G: "grass",
   P: "path", // player start / entrance tile, walkable
   E: "exit",
+  H: "heal", // Healing Center — walkable, fully revives KO'd party members on entry
 };
 
 function parseMap(raw: string[], zoneId: string, zoneName: string, exitTo: string | null): TileMap {
@@ -56,7 +57,7 @@ const MELITA_WOODS_RAW = [
   "TTT...TTT",
   "TT.GGG.TT",
   "T..GGG..T",
-  "P.GGGGG.E",
+  "PHGGGGG.E",
   "T..GGG..T",
   "TT.GGG.TT",
   "TTT...TTT",
@@ -67,7 +68,7 @@ const LUZZU_HARBOUR_RAW = [
   "TTTTTTTTTTT",
   "T.....TTTTT",
   "T.GGG.TTTTT",
-  "P.GGG.....E",
+  "PHGGG.....E",
   "T.GGG.TTTTT",
   "T.....TTTTT",
   "TTTTTTTTTTT",
@@ -75,7 +76,7 @@ const LUZZU_HARBOUR_RAW = [
 
 const AZURE_CAVERNS_RAW = [
   "TTTTTTTTT",
-  "TPGGG.TTT",
+  "TPGGGHTTT",
   "TT..G.TTT",
   "TTT.GGG.T",
   "TTT.G..TT",
@@ -103,7 +104,7 @@ export function tileAt(map: TileMap, row: number, col: number): TileType | undef
 
 export function isWalkable(map: TileMap, row: number, col: number): boolean {
   const tile = tileAt(map, row, col);
-  return tile === "path" || tile === "grass" || tile === "exit";
+  return tile === "path" || tile === "grass" || tile === "exit" || tile === "heal";
 }
 
 export function isEncounterTile(map: TileMap, row: number, col: number): boolean {
@@ -112,4 +113,8 @@ export function isEncounterTile(map: TileMap, row: number, col: number): boolean
 
 export function isExitTile(map: TileMap, row: number, col: number): boolean {
   return tileAt(map, row, col) === "exit";
+}
+
+export function isHealTile(map: TileMap, row: number, col: number): boolean {
+  return tileAt(map, row, col) === "heal";
 }
