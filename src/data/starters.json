@@ -1,0 +1,35 @@
+{
+  "starters": [
+    {
+      "line": "Grass",
+      "stages": [
+        { "id": "calfleaf", "name": "Calfleaf", "stage": 1, "types": ["Grass"], "evolvesAtLevel": 16 },
+        { "id": "vinehorn", "name": "Vinehorn", "stage": 2, "types": ["Grass"], "evolvesAtLevel": 36 },
+        { "id": "mosstaur", "name": "Moss-taur", "stage": 3, "types": ["Grass", "Ground"], "evolvesAtLevel": null }
+      ],
+      "baseStatsFinal": { "hp": 88, "atk": 110, "def": 95, "spatk": 65, "spdef": 90, "speed": 60 },
+      "signatureMove": "Megalith Charge"
+    },
+    {
+      "line": "Fire",
+      "stages": [
+        { "id": "pharawoof", "name": "Pharawoof", "stage": 1, "types": ["Fire"], "evolvesAtLevel": 17 },
+        { "id": "infernux", "name": "Infernux", "stage": 2, "types": ["Fire", "Psychic"], "evolvesAtLevel": 34 },
+        { "id": "pyrollis", "name": "Pyrollis", "stage": 3, "types": ["Fire", "Psychic"], "evolvesAtLevel": null }
+      ],
+      "baseStatsFinal": { "hp": 78, "atk": 80, "def": 70, "spatk": 125, "spdef": 95, "speed": 100 },
+      "signatureMove": "Oracle Flame"
+    },
+    {
+      "line": "Water",
+      "stages": [
+        { "id": "duckling", "name": "Duckling", "stage": 1, "types": ["Water"], "evolvesAtLevel": 15 },
+        { "id": "platyflow", "name": "Platyflow", "stage": 2, "types": ["Water"], "evolvesAtLevel": 33 },
+        { "id": "marinedge", "name": "Marinedge", "stage": 3, "types": ["Water", "Steel"], "evolvesAtLevel": null }
+      ],
+      "baseStatsFinal": { "hp": 90, "atk": 95, "def": 110, "spatk": 80, "spdef": 100, "speed": 65 },
+      "signatureMove": "Hull Ram",
+      "rideAbility": "surf_and_submerge"
+    }
+  ]
+}

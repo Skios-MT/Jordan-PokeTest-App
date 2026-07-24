@@ -1,0 +1,31 @@
+{
+  "legendaries": [
+    {
+      "id": "aegilord",
+      "name": "Aegilord",
+      "types": ["Steel", "Fighting"],
+      "aesthetic": "Knight-armor / Maltese cross motif",
+      "baseStats": { "hp": 100, "atk": 150, "def": 120, "spatk": 70, "spdef": 100, "speed": 90 },
+      "signatureMove": "Cross of Valour",
+      "storyFlagRequired": "chivalry_trial_complete"
+    },
+    {
+      "id": "megalithos",
+      "name": "Megalithos",
+      "types": ["Rock", "Psychic"],
+      "aesthetic": "Floating megalithic temple stone, glyph-etched",
+      "baseStats": { "hp": 110, "atk": 90, "def": 130, "spatk": 130, "spdef": 100, "speed": 40 },
+      "signatureMove": "Solstice Beam",
+      "storyFlagRequired": "antiquity_trial_complete"
+    },
+    {
+      "id": "siroccus",
+      "name": "Siroccus",
+      "types": ["Flying", "Ground"],
+      "aesthetic": "Sandstorm dragon, southern-wind motif",
+      "baseStats": { "hp": 95, "atk": 110, "def": 85, "spatk": 110, "spdef": 85, "speed": 120 },
+      "signatureMove": "Gregale Howl",
+      "storyFlagRequired": "both_trials_complete"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "regionalVariants": [
+    {
+      "id": "ferrocane",
+      "name": "Ferrocane",
+      "types": ["Electric", "Fire"],
+      "flavor": "Fortress guard-hound, lightning-forged"
+    },
+    {
+      "id": "katakomba",
+      "name": "Katakomba",
+      "types": ["Rock", "Ghost"],
+      "flavor": "Petrified catacomb sentinel"
+    },
+    {
+      "id": "zavorra",
+      "name": "Zavorra",
+      "types": ["Water", "Steel"],
+      "flavor": "Ballast-reef, shipwreck-adapted"
+    }
+  ]
+}

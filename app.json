@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Project Melita",
+    "slug": "project-melita",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.melita.game"
+    },
+    "android": {
+      "package": "com.melita.game"
+    }
+  }
+}
