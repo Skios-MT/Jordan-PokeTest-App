@@ -9,12 +9,13 @@ import { getZoneEncounterSettings } from "../game/zones";
 import { creatureFromPartyMember, partyMemberFromParticipant, partyMemberStats } from "../game/party";
 import { xpRewardForLevel, currencyRewardForLevel } from "../game/progression";
 import { getMove } from "../game/movesRepo";
-import { pickBestAvailableBall } from "../game/itemsRepo";
+import { pickBestAvailableBall, getItem, healingItems } from "../game/itemsRepo";
 import { BattleStateMachine, type Winner } from "../engine/battleManager";
 import { attemptCatch, type ContainerType } from "../engine/catching";
 import { isCruxOnCooldown, CRUX_AURA_STATUS_ID } from "../engine/cruxAura";
 import { getActiveEffect } from "../engine/statusEffects";
-import type { BattleAction, BattleContext } from "../engine/types";
+import { effectivePriority, effectiveSpeed } from "../engine/priority";
+import type { BattleAction, BattleContext, Move } from "../engine/types";
 import type { TypeName } from "../data/schemas";
 import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
@@ -27,8 +28,30 @@ type Props = NativeStackScreenProps<RootStackParamList, "Battle">;
 
 const WILD_BASE_CATCH_RATE = 190;
 const MAX_LOG_LINES = 5;
+/** Pause between the first and second actor's reveal, so each turn plays out in two beats rather than instantly. */
+const TURN_BEAT_DELAY_MS = 550;
+/** A hit clearing this fraction of max HP counts as a "big" hit for animation purposes. */
+const BIG_HIT_FRACTION = 0.25;
 
-type Outcome = Winner | "caught";
+type Outcome = Winner | "caught" | "fled";
+
+/** Cosmetic-only prediction of which side acts first, so the turn can be revealed in two beats
+ * matching real priority/speed order. The actual resolution still runs atomically through
+ * fsm.submitActions — this never affects real damage or state, only reveal sequencing. */
+function predictFirstActor(
+  ctx: BattleContext,
+  playerAction: BattleAction,
+  enemyAction: BattleAction,
+  moveResolver: (id: string) => Move
+): "player" | "enemy" {
+  const playerPriority = effectivePriority(playerAction, playerAction.kind === "move" ? moveResolver(playerAction.moveId).basePriority : 0);
+  const enemyPriority = effectivePriority(enemyAction, enemyAction.kind === "move" ? moveResolver(enemyAction.moveId).basePriority : 0);
+  if (playerPriority !== enemyPriority) return playerPriority > enemyPriority ? "player" : "enemy";
+  const playerSpeed = effectiveSpeed(ctx.playerActive);
+  const enemySpeed = effectiveSpeed(ctx.enemyActive);
+  if (playerSpeed !== enemySpeed) return playerSpeed > enemySpeed ? "player" : "enemy";
+  return "player";
+}
 
 interface BattleRewards {
   money: number;
@@ -106,7 +129,9 @@ export function BattleScreen({ navigation }: Props) {
   const [outcome, setOutcome] = useState<Outcome>(null);
   const [rewards, setRewards] = useState<BattleRewards | null>(null);
   const [showParty, setShowParty] = useState(false);
+  const [showItems, setShowItems] = useState(false);
   const [forcedSwitchPending, setForcedSwitchPending] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   const playerAnim = useCombatantAnimation();
   const enemyAnim = useCombatantAnimation();
@@ -141,52 +166,83 @@ export function BattleScreen({ navigation }: Props) {
     });
   }
 
-  function runTurn(playerAction: BattleAction, logLines: string[]) {
+  /**
+   * Resolves one full turn atomically via the engine (submitActions is
+   * synchronous), but reveals it to the player in two sequential beats —
+   * the first actor's line + animation immediately, the second actor's
+   * after a short delay — so each turn plays out as a clear "your move,
+   * then the wild creature's move" rather than both landing at once.
+   */
+  function runTurn(playerAction: BattleAction, playerLines: string[]) {
     if (!fsm) return;
     const ctx = fsm.getContext();
     const prevSnapshot = snapshot;
     const enemyMoveId = pickEnemyMoveId();
-    const enemyMoveName = getMove(enemyMoveId).name;
-
-    fsm.submitActions(playerAction, { kind: "move", actorId: ctx.enemyActive.id, moveId: enemyMoveId });
-
-    const nextSnapshot = snapshotFrom(ctx);
+    const enemyMove = getMove(enemyMoveId);
+    const enemyAction: BattleAction = { kind: "move", actorId: ctx.enemyActive.id, moveId: enemyMoveId };
+    const enemyLine = `Wild ${enemy.displayName} used ${enemyMove.name}.`;
     const activeName = party.find((m) => m.uid === ctx.playerActive.id)?.displayName ?? "Your creature";
-    const lines = [...logLines, `Wild ${enemy.displayName} used ${enemyMoveName}.`];
-    if (nextSnapshot.enemyHp <= 0) lines.push(`Wild ${enemy.displayName} fainted!`);
-    if (nextSnapshot.playerHp <= 0) lines.push(`${activeName} fainted!`);
 
-    setSnapshot(nextSnapshot);
-    pushLog(lines);
-    updatePartyMemberHp(ctx.playerActive.id, nextSnapshot.playerHp);
+    const firstIsPlayer = predictFirstActor(ctx, playerAction, enemyAction, getMove) === "player";
 
-    // Approximate "juice": we don't have per-actor turn-order visibility from
-    // here, so both sides lunge for having acted, and shake/faint follow the
-    // actual HP deltas. Good enough for placeholder animation, not a literal
-    // replay of engine turn order.
-    playerAnim.lunge();
-    if (prevSnapshot && nextSnapshot.enemyHp < prevSnapshot.enemyHp) enemyAnim.hit();
-    if (nextSnapshot.enemyHp <= 0) {
-      enemyAnim.faint();
-    } else {
-      enemyAnim.lunge();
-    }
-    if (prevSnapshot && nextSnapshot.playerHp < prevSnapshot.playerHp) playerAnim.hit();
-    if (nextSnapshot.playerHp <= 0) playerAnim.faint();
+    fsm.submitActions(playerAction, enemyAction);
+    const nextSnapshot = snapshotFrom(ctx);
 
-    if (fsm.getState() !== "BATTLE_END") return;
+    setResolving(true);
 
-    if (nextSnapshot.enemyHp <= 0) {
-      finishBattle("player", ctx);
-      return;
-    }
+    const firstLines = firstIsPlayer ? playerLines : [enemyLine];
+    if (firstIsPlayer) playerAnim.windUp();
+    else enemyAnim.windUp();
+    pushLog(firstLines);
+    if (firstIsPlayer) playerAnim.lunge();
+    else enemyAnim.lunge();
 
-    const reserves = party.filter((m) => m.uid !== ctx.playerActive.id && m.currentHp > 0);
-    if (reserves.length > 0) {
-      setForcedSwitchPending(true);
-    } else {
-      finishBattle("enemy", ctx);
-    }
+    setTimeout(() => {
+      const secondLines = firstIsPlayer ? [enemyLine] : playerLines;
+      pushLog(secondLines);
+      if (firstIsPlayer) enemyAnim.windUp();
+      else playerAnim.windUp();
+
+      const enemyDamage = prevSnapshot ? prevSnapshot.enemyHp - nextSnapshot.enemyHp : 0;
+      const playerDamage = prevSnapshot ? prevSnapshot.playerHp - nextSnapshot.playerHp : 0;
+
+      if (enemyDamage > 0) {
+        enemyAnim.hit(enemyDamage >= nextSnapshot.enemyMaxHp * BIG_HIT_FRACTION ? "big" : "small");
+      } else if (firstIsPlayer) {
+        enemyAnim.lunge();
+      }
+      if (nextSnapshot.enemyHp <= 0) enemyAnim.faint();
+
+      if (playerDamage > 0) {
+        playerAnim.hit(playerDamage >= nextSnapshot.playerMaxHp * BIG_HIT_FRACTION ? "big" : "small");
+      } else if (!firstIsPlayer) {
+        playerAnim.lunge();
+      }
+      if (nextSnapshot.playerHp <= 0) playerAnim.faint();
+
+      const faintLines: string[] = [];
+      if (nextSnapshot.enemyHp <= 0) faintLines.push(`Wild ${enemy.displayName} fainted!`);
+      if (nextSnapshot.playerHp <= 0) faintLines.push(`${activeName} fainted!`);
+      if (faintLines.length) pushLog(faintLines);
+
+      setSnapshot(nextSnapshot);
+      updatePartyMemberHp(ctx.playerActive.id, nextSnapshot.playerHp);
+      setResolving(false);
+
+      if (fsm.getState() !== "BATTLE_END") return;
+
+      if (nextSnapshot.enemyHp <= 0) {
+        finishBattle("player", ctx);
+        return;
+      }
+
+      const reserves = party.filter((m) => m.uid !== ctx.playerActive.id && m.currentHp > 0);
+      if (reserves.length > 0) {
+        setForcedSwitchPending(true);
+      } else {
+        finishBattle("enemy", ctx);
+      }
+    }, TURN_BEAT_DELAY_MS);
   }
 
   function switchTo(uid: string, { forced }: { forced: boolean }) {
@@ -210,23 +266,56 @@ export function BattleScreen({ navigation }: Props) {
   }
 
   function handleMove(moveId: string, moveName: string) {
-    if (outcome || forcedSwitchPending || !fsm || fsm.getState() !== "ACTION_SELECT") return;
+    if (outcome || forcedSwitchPending || resolving || !fsm || fsm.getState() !== "ACTION_SELECT") return;
     const ctx = fsm.getContext();
     runTurn({ kind: "move", actorId: ctx.playerActive.id, moveId }, [`You used ${moveName}.`]);
   }
 
   function handleInvokeCrux() {
-    if (!fsm || !snapshot || outcome || forcedSwitchPending) return;
+    if (!fsm || !snapshot || outcome || forcedSwitchPending || resolving) return;
     if (fsm.getState() !== "ACTION_SELECT" || snapshot.playerCruxOnCooldown) return;
     const ctx = fsm.getContext();
     const name = activeMember?.displayName ?? "Your creature";
+    playerAnim.cruxGlow();
     runTurn({ kind: "invoke_crux", actorId: ctx.playerActive.id }, [`${name} invokes the Crux Aura!`]);
+  }
+
+  function handleFlee() {
+    if (!fsm || outcome || forcedSwitchPending || resolving || fsm.getState() !== "ACTION_SELECT") return;
+    playerAnim.fleeOut();
+    pushLog(["You turned tail and ran!"]);
+    setOutcome("fled");
+  }
+
+  const healableItems = healingItems().filter((item) => (inventory[item.id] ?? 0) > 0);
+
+  function handleUseItem(itemId: string) {
+    if (!fsm || outcome || forcedSwitchPending || resolving || fsm.getState() !== "ACTION_SELECT") return;
+    const item = getItem(itemId);
+    if (item.healPercent === undefined) return;
+    const ctx = fsm.getContext();
+    const maxHp = ctx.playerActive.stats.hp;
+    const before = ctx.playerActive.currentHp;
+    const healAmount = Math.round((maxHp * item.healPercent) / 100);
+    const after = Math.min(maxHp, before + healAmount);
+    ctx.playerActive.currentHp = after;
+    const healedAmount = after - before;
+
+    consumeItem(itemId);
+    setShowItems(false);
+    playerAnim.heal();
+
+    const name = activeMember?.displayName ?? "Your creature";
+    runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
+      `You used the ${item.name}!`,
+      `${name} recovered ${healedAmount} HP!`,
+    ]);
   }
 
   const availableBall = pickBestAvailableBall(inventory);
 
   function handleCatch() {
-    if (!fsm || outcome || forcedSwitchPending || fsm.getState() !== "ACTION_SELECT" || !availableBall) return;
+    if (!fsm || outcome || forcedSwitchPending || resolving || fsm.getState() !== "ACTION_SELECT" || !availableBall) return;
     const ctx = fsm.getContext();
     const enemyCreature = ctx.enemyActive;
 
@@ -238,6 +327,7 @@ export function BattleScreen({ navigation }: Props) {
       status: enemyCreature.status,
     });
     consumeItem(availableBall.id);
+    enemyAnim.wobble();
 
     if (result.caught) {
       const member = partyMemberFromParticipant(enemy, "wild");
@@ -277,7 +367,7 @@ export function BattleScreen({ navigation }: Props) {
 
   const playerMoves = activeMember.moveIds.map(getMove);
   const reserves = party.filter((m) => m.uid !== activeMember.uid && m.currentHp > 0);
-  const actionsDisabled = !!outcome || forcedSwitchPending;
+  const actionsDisabled = !!outcome || forcedSwitchPending || resolving;
 
   return (
     <View style={styles.container}>
@@ -358,14 +448,65 @@ export function BattleScreen({ navigation }: Props) {
           disabled={actionsDisabled}
           style={({ pressed }) => [
             styles.moveButton,
-            styles.partyButton,
+            styles.partyButtonHalf,
             actionsDisabled && styles.moveButtonDisabled,
             pressed && styles.moveButtonPressed,
           ]}
         >
           <Text style={styles.moveName}>Party</Text>
         </Pressable>
+        <Pressable
+          testID="open-item-sheet"
+          onPress={() => setShowItems(true)}
+          disabled={actionsDisabled || healableItems.length === 0}
+          style={({ pressed }) => [
+            styles.moveButton,
+            styles.partyButtonHalf,
+            (actionsDisabled || healableItems.length === 0) && styles.moveButtonDisabled,
+            pressed && styles.moveButtonPressed,
+          ]}
+        >
+          <Text style={styles.moveName}>Use Item</Text>
+          <Text style={styles.cruxHint}>{healableItems.length > 0 ? "heal — costs the turn" : "no medicine left"}</Text>
+        </Pressable>
+        <Pressable
+          testID="flee-button"
+          onPress={handleFlee}
+          disabled={actionsDisabled}
+          style={({ pressed }) => [
+            styles.moveButton,
+            styles.fleeButton,
+            actionsDisabled && styles.moveButtonDisabled,
+            pressed && styles.moveButtonPressed,
+          ]}
+        >
+          <Text style={styles.moveName}>Run Away</Text>
+          <Text style={styles.cruxHint}>flee the encounter</Text>
+        </Pressable>
       </View>
+
+      <Modal visible={showItems} transparent animationType="none" onRequestClose={() => setShowItems(false)}>
+        <View style={styles.sheetBackdrop}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Use Item</Text>
+            {healableItems.map((item) => (
+              <Pressable
+                key={item.id}
+                testID={`use-item-${item.id}`}
+                onPress={() => handleUseItem(item.id)}
+                style={styles.sheetRow}
+              >
+                <Text style={styles.sheetCreature}>
+                  {item.name} <Text style={styles.sheetLevel}>x{inventory[item.id] ?? 0}</Text>
+                </Text>
+                <Text style={styles.sheetHp}>+{item.healPercent}% HP</Text>
+              </Pressable>
+            ))}
+            {healableItems.length === 0 && <Text style={styles.sheetNote}>No usable medicine in your Bag.</Text>}
+            <PrimaryButton label="Close" variant="secondary" onPress={() => setShowItems(false)} />
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showParty} transparent animationType="none" onRequestClose={() => setShowParty(false)}>
         <View style={styles.sheetBackdrop}>
@@ -427,11 +568,18 @@ export function BattleScreen({ navigation }: Props) {
       {outcome && (
         <View style={styles.resultOverlay}>
           <Text style={styles.resultTitle}>
-            {outcome === "player" ? "Victory!" : outcome === "caught" ? "Gotcha!" : "You blacked out..."}
+            {outcome === "player"
+              ? "Victory!"
+              : outcome === "caught"
+              ? "Gotcha!"
+              : outcome === "fled"
+              ? "Got away safely!"
+              : "You blacked out..."}
           </Text>
           <Text style={styles.resultSubtitle}>
             {outcome === "player" && `${activeMember.displayName} defeated the wild ${enemy.displayName}.`}
             {outcome === "caught" && `Wild ${enemy.displayName} joined your party.`}
+            {outcome === "fled" && `You fled from the wild ${enemy.displayName}.`}
             {outcome === "enemy" && "Your whole party has fainted."}
           </Text>
           {rewards && (
@@ -468,6 +616,8 @@ function CombatantPanel({
 }) {
   return (
     <View style={[styles.panel, highlightCrux && styles.panelCruxActive]}>
+      <Animated.View pointerEvents="none" style={[styles.flashOverlay, styles.hitFlashOverlay, { opacity: anim.hitFlash }]} />
+      <Animated.View pointerEvents="none" style={[styles.flashOverlay, styles.healFlashOverlay, { opacity: anim.healFlash }]} />
       <View style={styles.panelTopRow}>
         <Animated.View
           style={{
@@ -508,6 +658,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   panel: {
+    position: "relative",
+    overflow: "hidden",
     backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 1,
@@ -516,6 +668,19 @@ const styles = StyleSheet.create({
   },
   panelCruxActive: {
     borderColor: colors.accent,
+  },
+  flashOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  hitFlashOverlay: {
+    backgroundColor: colors.danger,
+  },
+  healFlashOverlay: {
+    backgroundColor: colors.success,
   },
   panelTopRow: {
     flexDirection: "row",
@@ -598,9 +763,14 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 11,
   },
-  partyButton: {
+  partyButtonHalf: {
+    flexBasis: "45%",
+    alignItems: "center",
+  },
+  fleeButton: {
     flexBasis: "100%",
     alignItems: "center",
+    borderColor: colors.danger,
   },
   sheetBackdrop: {
     flex: 1,

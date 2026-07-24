@@ -14,12 +14,12 @@ export function TitleScreen({ navigation }: Props) {
         <Text style={styles.crestGlyph}>✛</Text>
       </View>
       <View style={styles.titleBlock}>
-        <Text style={styles.title}>Project Melita</Text>
-        <Text style={styles.subtitle}>Chivalry & Antiquity</Text>
+        <Text style={styles.title}>Chivalry & Antiquity</Text>
+        <Text style={styles.subtitle}>Project Melita</Text>
       </View>
 
       <View style={styles.actions}>
-        <PrimaryButton label="New Game" onPress={() => navigation.navigate("RegionSelect")} />
+        <PrimaryButton label="New Game" onPress={() => navigation.navigate("NameEntry")} />
         <PrimaryButton label="Continue" onPress={() => {}} disabled variant="secondary" />
         <Text style={styles.hint}>No save file yet — Continue unlocks once persistence is wired up.</Text>
       </View>

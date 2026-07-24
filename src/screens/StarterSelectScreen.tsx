@@ -1,9 +1,8 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import startersData from "../data/starters.json";
 import { StartersFileSchema } from "../data/schemas";
 import type { RootStackParamList } from "../navigation/types";
-import type { StarterLineName } from "../game/creatureFactory";
 import { useGameStore } from "../state/gameStore";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { TypeBadge } from "./components/TypeBadge";
@@ -14,87 +13,83 @@ type Props = NativeStackScreenProps<RootStackParamList, "StarterSelect">;
 
 const starters = StartersFileSchema.parse(startersData).starters;
 
+/** Reveal screen: the quiz already picked selectedLine, this just confirms it. */
 export function StarterSelectScreen({ navigation }: Props) {
+  const playerName = useGameStore((s) => s.playerName);
   const selectedLine = useGameStore((s) => s.selectedLine);
-  const selectStarter = useGameStore((s) => s.selectStarter);
+  const party = useGameStore((s) => s.party);
+
+  const starterLine = starters.find((s) => s.line === selectedLine);
+  const stageOne = starterLine?.stages[0];
+  const partner = party[0];
 
   const handleConfirm = () => {
-    if (!selectedLine) return;
     navigation.reset({ index: 0, routes: [{ name: "Home" }] });
   };
 
+  if (!starterLine || !stageOne) {
+    return (
+      <ScreenBackground style={styles.container}>
+        <Text style={styles.title}>No partner chosen yet</Text>
+        <PrimaryButton label="Take the Quiz" onPress={() => navigation.navigate("StarterQuiz")} />
+      </ScreenBackground>
+    );
+  }
+
   return (
     <ScreenBackground style={styles.container}>
-      <Text style={styles.title}>Choose your first partner</Text>
-      <ScrollView contentContainerStyle={styles.list}>
-        {starters.map((starter) => {
-          const stageOne = starter.stages[0];
-          const isSelected = selectedLine === starter.line;
-          return (
-            <Pressable
-              key={starter.line}
-              onPress={() => selectStarter(starter.line as StarterLineName)}
-              style={({ pressed }) => [
-                styles.card,
-                isSelected && styles.cardSelected,
-                pressed && styles.cardPressed,
-              ]}
-            >
-              <Text style={styles.name}>{stageOne.name}</Text>
-              <View style={styles.badgeRow}>
-                {stageOne.types.map((t) => (
-                  <TypeBadge key={t} type={t} />
-                ))}
-              </View>
-              <Text style={styles.signature}>Signature move: {starter.signatureMove}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <Text style={styles.eyebrow}>The islands have decided</Text>
+      <Text style={styles.title}>
+        {playerName}, your partner is {stageOne.name}!
+      </Text>
 
-      <PrimaryButton label="Confirm" onPress={handleConfirm} disabled={!selectedLine} />
+      <View style={styles.card}>
+        <Text style={styles.name}>{stageOne.name}</Text>
+        <View style={styles.badgeRow}>
+          {stageOne.types.map((t) => (
+            <TypeBadge key={t} type={t} />
+          ))}
+        </View>
+        <Text style={styles.signature}>Signature move: {starterLine.signatureMove}</Text>
+        {partner && <Text style={styles.level}>Starting level {partner.level}</Text>}
+      </View>
+
+      <PrimaryButton testID="confirm-starter" label="Confirm" onPress={handleConfirm} />
     </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 20,
-    paddingTop: 64,
-    paddingBottom: 24,
+    gap: 20,
+  },
+  eyebrow: {
+    color: colors.textMuted,
+    fontSize: 13,
+    letterSpacing: 2,
+    textTransform: "uppercase",
   },
   title: {
     color: colors.text,
     fontSize: 22,
     fontWeight: "700",
     textAlign: "center",
-    marginBottom: 20,
-  },
-  list: {
-    gap: 14,
-    paddingBottom: 12,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.border,
-    padding: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  cardSelected: {
     borderColor: colors.accent,
-  },
-  cardPressed: {
-    opacity: 0.85,
+    padding: 20,
+    maxWidth: 340,
+    width: "100%",
   },
   name: {
     color: colors.text,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     marginBottom: 8,
   },
@@ -105,5 +100,10 @@ const styles = StyleSheet.create({
   signature: {
     color: colors.textMuted,
     fontSize: 13,
+  },
+  level: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginTop: 4,
   },
 });

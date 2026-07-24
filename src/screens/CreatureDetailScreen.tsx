@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
@@ -45,6 +46,8 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   const params = route.params;
   const party = useGameStore((s) => s.party);
   const caughtSpeciesIds = useGameStore((s) => s.caughtSpeciesIds);
+  const releaseCreature = useGameStore((s) => s.releaseCreature);
+  const [confirmingRelease, setConfirmingRelease] = useState(false);
 
   const partyMember = params.source === "party" ? party.find((m) => m.uid === params.uid) : undefined;
   const dexEntry = params.source === "species" ? getDexEntry(params.speciesId) : undefined;
@@ -146,6 +149,36 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
 
         {params.source === "species" && !isCaught && (
           <Text style={styles.unrecorded}>Not yet caught — details shown are from field observation only.</Text>
+        )}
+
+        {partyMember && party.length > 1 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Release</Text>
+            {confirmingRelease ? (
+              <View style={styles.releaseConfirmRow}>
+                <Text style={styles.flavorText}>Release {partyMember.displayName} for good? This can't be undone.</Text>
+                <View style={styles.releaseConfirmButtons}>
+                  <Pressable
+                    testID="confirm-release"
+                    onPress={() => {
+                      releaseCreature(partyMember.uid);
+                      navigation.goBack();
+                    }}
+                    style={styles.releaseConfirmBtn}
+                  >
+                    <Text style={styles.releaseConfirmBtnText}>Yes, release</Text>
+                  </Pressable>
+                  <Pressable testID="cancel-release" onPress={() => setConfirmingRelease(false)} style={styles.releaseCancelBtn}>
+                    <Text style={styles.releaseCancelBtnText}>Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable testID="release-button" onPress={() => setConfirmingRelease(true)} style={styles.releaseButton}>
+                <Text style={styles.releaseButtonText}>Release {partyMember.displayName}</Text>
+              </Pressable>
+            )}
+          </View>
         )}
       </ScrollView>
 
@@ -265,5 +298,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 100,
+  },
+  releaseButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  releaseButtonText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  releaseConfirmRow: {
+    gap: 10,
+  },
+  releaseConfirmButtons: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  releaseConfirmBtn: {
+    backgroundColor: colors.danger,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  releaseConfirmBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  releaseCancelBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  releaseCancelBtnText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

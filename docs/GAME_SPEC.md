@@ -198,7 +198,8 @@ Everything else in this document is original and clear to ship.
 ### 4.1 Screen Flow
 
 ```
-Splash → Title → (New Game: Region Select → Starter Select) / (Continue: Load Save)
+Splash → Title ("Chivalry & Antiquity") →
+  (New Game: Name Entry → Region Select → Starter Quiz → Starter Reveal) / (Continue: Load Save)
    └─▶ HOME (Overworld HUD)
          ├─▶ Party Management (drag-reorder, held items, move-relearn)
          ├─▶ Creature Index (Codex — grid view, filter by type/zone/caught-status)
@@ -210,10 +211,19 @@ Splash → Title → (New Game: Region Select → Starter Select) / (Continue: L
 ```
 
 **Implementation status** (`src/screens/`, wired up via `src/navigation/RootNavigator.tsx`): Title,
-Region Select, Starter Select, Home, Map, Battle View, Party, Codex, Bag, Shop, and a shared Creature
-Detail screen all exist and are navigable end to end. Region Select is a single-region confirmation
-screen rather than a real choice — Melita's three islands (section 2) are one region, not several to
-pick between; a second region would slot in here later.
+Name Entry, Region Select, Starter Quiz, Starter Select (reveal/confirm), Home, Map, Battle View,
+Party, Codex, Bag, Shop, and a shared Creature Detail screen all exist and are navigable end to end.
+The title screen's headline is **"Chivalry & Antiquity"** (Project Melita is the dev-facing project
+name, shown as a small subtitle). Region Select is a single-region confirmation screen rather than a
+real choice — Melita's three islands (section 2) are one region, not several to pick between; a
+second region would slot in here later.
+
+**Starter selection** is no longer a direct tap-to-choose grid. New Game asks the player's name
+(`NameEntryScreen`, stored in `gameStore.playerName`), then after Region Select the player answers a
+3-question, island-themed personality quiz (`src/game/starterQuiz.ts`, `StarterQuizScreen.tsx` —
+ferry crossing / harbour chore / festa fireworks, each option leaning Fire/Water/Grass); the
+majority-answer line is assigned automatically and confirmed on a reveal screen
+(`StarterSelectScreen.tsx`) rather than picked by hand.
 
 **Map** (`src/game/mapData.ts`, `src/game/zones.ts`, `src/screens/MapScreen.tsx`) is three
 hand-authored 7x7 tile grids — Melita Woods, Luzzu Harbour, Azure Caverns — chained in a line, each
@@ -221,29 +231,46 @@ with one exit tile leading to the next zone and one entrance (where the player a
 the "one exit, one entrance" brief rather than the spec's full node-graph-of-many-zones world.
 Movement is a 4-directional D-pad rather than the spec's tap-to-pathfind (simpler to build correctly
 first); the player avatar is a directional glyph, not sprite art, per the agreed "stylized
-placeholders" approach. Walking onto a grass tile rolls a chance to trigger a wild battle drawn from
+placeholders" approach. Walking onto a grass tile rolls a 19.5% chance (`ENCOUNTER_CHANCE` in
+`MapScreen.tsx` — bumped 30% from an original 15% baseline) to trigger a wild battle drawn from
 `src/game/encounterTable.ts`'s weighted pool, whose level range is set per zone in `zones.ts` — later
 zones spawn stronger wild creatures.
 
 Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
 action (`src/engine/catching.ts` wired to the Bag's ball items), randomized wild encounters, **party
 switching** (voluntary mid-battle via the Party sheet, costing the turn; forced and free when the
-active creature faints and a reserve remains — `BattleStateMachine.replacePlayerActive`), and
-**levels/XP**: starters begin at level 5 (`STARTER_STARTING_LEVEL`), defeating a wild creature grants
+active creature faints and a reserve remains — `BattleStateMachine.replacePlayerActive`), a **Run
+Away** button (flees the encounter immediately, no reward, no penalty — a client-side action, since
+the engine's `resolveAction` already treats a submitted `"flee"` action as a no-op and this bypasses
+`submitActions` entirely rather than teaching the engine a new outcome), and a **Use Item** button
+that genuinely restores HP: it opens a sheet of the medicine items you're carrying, consumes one, and
+heals the active creature by that item's `healPercent` of max HP (see 4.3) before the enemy's turn
+resolves — this costs the turn, matching how throwing a ball or switching does. Each turn is still
+resolved atomically by the engine (`BattleStateMachine.submitActions`), but is *revealed* to the
+player in two sequential beats — the faster actor's line and animation play immediately, the slower
+actor's play after a short pause — so a turn visibly plays out as "your move, then the wild
+creature's move" rather than both landing at once.
+
+**Levels/XP**: starters begin at level 5 (`STARTER_STARTING_LEVEL`), defeating a wild creature grants
 XP and gold (`src/game/progression.ts`), and stats scale with level via `effectiveStats()` rather
 than staying flat. Catching adds a real party member (`src/game/party.ts`), which Party, Codex
 ("seen"/"caught" tracking), and Creature Detail (stats, moves, HP, XP-to-next-level) all read from
 the same `zustand` store (`src/state/gameStore.ts`) — no separate mock data path for these screens.
+Party and Creature Detail also expose a **Release** action (with an inline "are you sure?" confirm
+step, no native alert) for any party member as long as it isn't your last one.
 Each combatant panel shows a generated `CreatureAvatar` (type-colored token, no illustrated art) with
-lunge/hit/faint animations. The Result Screen shows win/lose/caught plus gold and XP earned (and a
-level-up notice) — still no XP *bar* animation or catch-prompt flourish. Move Select shows type +
+lunge/hit/faint/heal/crux-glow/catch-wobble/flee animations plus a hit-flash tint on big hits.
+The Result Screen shows win/lose/caught/fled plus gold and XP earned (and a level-up notice) — still
+no XP *bar* animation or catch-prompt flourish. Move Select shows type +
 name only, no PP (PP isn't modeled in the engine) and no long-press tooltip. The Codex/Party stat and
 move displays surface the same "not recorded yet" gaps flagged in section 3.1 (stage-1/2 starters
 have no authored stat block) rather than inventing numbers.
 
 **Shop** (`src/screens/ShopScreen.tsx`) sells Balls and Medicine for gold (`src/data/items.json`'s
 `price` field); Key Items aren't for sale. Gold is earned from both catching and defeating wild
-creatures (`currencyRewardForLevel`), starting balance 50.
+creatures (`currencyRewardForLevel`), starting balance 50. The starting Bag is deliberately small —
+3 Pastizz and 3 Greca Traps only; Melitan Ball, Festa Trap, Qassata, and Ftira biz-Zejt all start at
+0 and must be bought.
 
 The creature roster (section 3.3) now includes one original wild species, **Fossary** (Bug/Grass,
 `src/data/wildCreatures.json`), and the three regional variants are fully battle-ready with real
@@ -259,7 +286,9 @@ zone, not the species pool, since there's no real per-zone spawn table yet.
 
 ### 4.3 Maltese Cultural Touches (flavor layer, non-mechanical unless noted)
 
-- **Pastizzi** — consumable item, restores stamina/PP (mechanical).
+- **Pastizz** (formerly "Pastizzi") — consumable medicine, restores 20% of max HP in battle (mechanical, via the Battle View's Use Item button).
+- **Qassata** — consumable medicine, restores 50% of max HP in battle. Shop-only, not in the starting Bag.
+- **Ftira biz-Zejt** — consumable medicine, restores 75% of max HP in battle. Shop-only, not in the starting Bag.
 - **"Il-Għajn" ward charm** — key item cosmetic + minor passive (e.g., +1 flee-chance stage). Renamed from the original brief's "Eye of Osiris" (Egyptian, not Maltese) to draw on the real Mediterranean evil-eye protective charm for authenticity.
 - **Festa events** — limited-time in-game festival triggers (fireworks minigame, bonus spawn rates, exclusive vendor stock) tied to the in-game calendar.
 - **Local terms** (*Mela, Ħobż, Ċaw*) — used in NPC barks/flavor text only, not menu labels, to keep navigation universally clear for a global mobile audience.

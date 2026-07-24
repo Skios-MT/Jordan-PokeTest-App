@@ -6,7 +6,7 @@
       "category": "balls",
       "description": "The finest craftsmanship on the islands. Catch multiplier 4.0x.",
       "catchMultiplier": 4.0,
-      "startingQuantity": 5,
+      "startingQuantity": 0,
       "price": 200
     },
     {
@@ -24,16 +24,35 @@
       "category": "balls",
       "description": "Decorated for the summer festa. Catch multiplier 2.0x.",
       "catchMultiplier": 2.0,
-      "startingQuantity": 1,
+      "startingQuantity": 0,
       "price": 120
     },
     {
-      "id": "pastizzi",
-      "name": "Pastizzi",
+      "id": "pastizz",
+      "name": "Pastizz",
       "category": "medicine",
-      "description": "A flaky savoury pastry sold at every ferry stop. Restores stamina — not yet consumable in battle.",
+      "description": "A flaky savoury pastry sold at every ferry stop. Restores 20% of max HP in battle.",
+      "healPercent": 20,
       "startingQuantity": 3,
       "price": 50
+    },
+    {
+      "id": "qassata",
+      "name": "Qassata",
+      "category": "medicine",
+      "description": "A ricotta-filled pastry parcel, hearty enough to restore 50% of max HP in battle.",
+      "healPercent": 50,
+      "startingQuantity": 0,
+      "price": 140
+    },
+    {
+      "id": "ftira_biz_zejt",
+      "name": "Ftira biz-Zejt",
+      "category": "medicine",
+      "description": "A whole olive-oil-soaked ftira loaf, packed with tomato and tuna — restores 75% of max HP in battle.",
+      "healPercent": 75,
+      "startingQuantity": 0,
+      "price": 220
     },
     {
       "id": "silent_bell",

@@ -2,7 +2,9 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "./types";
 import { TitleScreen } from "../screens/TitleScreen";
+import { NameEntryScreen } from "../screens/NameEntryScreen";
 import { RegionSelectScreen } from "../screens/RegionSelectScreen";
+import { StarterQuizScreen } from "../screens/StarterQuizScreen";
 import { StarterSelectScreen } from "../screens/StarterSelectScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { MapScreen } from "../screens/MapScreen";
@@ -21,7 +23,9 @@ export function RootNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="Title" component={TitleScreen} />
+        <Stack.Screen name="NameEntry" component={NameEntryScreen} />
         <Stack.Screen name="RegionSelect" component={RegionSelectScreen} />
+        <Stack.Screen name="StarterQuiz" component={StarterQuizScreen} />
         <Stack.Screen name="StarterSelect" component={StarterSelectScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Map" component={MapScreen} />

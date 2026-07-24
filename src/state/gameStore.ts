@@ -37,6 +37,8 @@ interface GameState {
   addItem: (itemId: string, quantity: number) => void;
   grantExperience: (uid: string, xp: number) => ExperienceGainResult | null;
   setCurrentZone: (zoneId: string) => void;
+  setPlayerName: (name: string) => void;
+  releaseCreature: (uid: string) => boolean;
   resetGame: () => void;
 }
 
@@ -122,8 +124,20 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setCurrentZone: (zoneId) => set({ currentZoneId: zoneId }),
 
+  setPlayerName: (name) => set({ playerName: name.trim().length > 0 ? name.trim() : DEFAULT_PLAYER_NAME }),
+
+  releaseCreature: (uid) => {
+    const { party } = get();
+    if (party.length <= 1) return false;
+    const exists = party.some((m) => m.uid === uid);
+    if (!exists) return false;
+    set({ party: party.filter((m) => m.uid !== uid) });
+    return true;
+  },
+
   resetGame: () =>
     set({
+      playerName: DEFAULT_PLAYER_NAME,
       selectedLine: null,
       currentZoneId: STARTING_ZONE_ID,
       battlesWon: 0,

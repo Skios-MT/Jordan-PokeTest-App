@@ -2,7 +2,7 @@
 
 Experimental game development with Claude Code.
 
-## Project Melita
+## Chivalry & Antiquity (Project Melita)
 
 A turn-based creature-collector set in the original archipelago region of
 Melita. Full design spec: [`docs/GAME_SPEC.md`](docs/GAME_SPEC.md).
@@ -32,28 +32,40 @@ App.tsx                Expo entry point, renders the navigator
 
 ### Screens implemented
 
-Title -> New Game -> Region Select -> Starter Select -> Home, with Map,
-Battle View, Party, Codex, Bag, and Shop all reachable from Home, matching
-spec 4.1.
+Title ("Chivalry & Antiquity") -> New Game -> Name Entry -> Region Select ->
+Starter Quiz -> Starter Reveal -> Home, with Map, Battle View, Party, Codex,
+Bag, and Shop all reachable from Home, matching spec 4.1.
 
+- **Name Entry**: the player types their own name, stored in the game store
+  and used in narrative text (e.g. the starter reveal screen).
+- **Starter Quiz**: 3 island-themed multiple-choice questions (a ferry
+  crossing, a harbour chore, a festa night); the majority answer assigns a
+  Grass/Fire/Water starter automatically, shown on a reveal/confirm screen —
+  no more direct tap-to-choose.
 - **Map**: three connected zones (Melita Woods -> Luzzu Harbour -> Azure
   Caverns), each a walkable tile grid with a 4-directional D-pad, a player
   avatar, and one exit tile leading to the next (stronger) zone. Walking
-  onto tall grass has a chance to trigger a wild battle.
+  onto tall grass has a 19.5% chance to trigger a wild battle.
 - **Battle View**: pick a move, Invoke Crux, throw a ball to catch the wild
   creature, switch party members (voluntarily via the Party sheet, or for
-  free when your active creature faints and a reserve remains) — all driven
-  by the real engine, not mock data. Wild encounters are drawn from a
-  weighted encounter table whose level range increases per zone. Winning a
-  battle grants XP and gold; each combatant shows a generated, type-colored
-  avatar with lunge/hit/faint animations.
+  free when your active creature faints and a reserve remains), use a
+  medicine item to heal, or run away — all driven by the real engine, not
+  mock data. Each turn resolves atomically but reveals in two beats (your
+  action, then the wild creature's) for a clearer turn-based feel. Wild
+  encounters are drawn from a weighted encounter table whose level range
+  increases per zone. Winning a battle grants XP and gold; each combatant
+  shows a generated, type-colored avatar with lunge/hit/faint/heal/crux-glow
+  animations and a flash tint on big hits.
 - **Party**: lists every caught creature (level, HP, fainted status); tap
   one for its Creature Detail (stats, HP, XP-to-next-level, known moves).
+  Release any creature (except your last one) with an inline confirm step.
 - **Codex**: a grid of all known species; unseen ones show as "???" until
   encountered in battle, caught ones are marked. Filterable by type.
-- **Bag**: Balls / Medicine / Key Items / Battle Items tabs. Balls are
-  functionally wired to the catch mechanic; Medicine and Key Items are
-  inventory-only (not yet consumable).
+- **Bag**: Balls / Medicine / Key Items / Battle Items tabs. The starting Bag
+  is small on purpose — 3 Pastizz and 3 Greca Traps only; everything else
+  (Melitan Ball, Festa Trap, Qassata, Ftira biz-Zejt) starts at 0 and must be
+  bought in the Shop. Pastizz/Qassata/Ftira biz-Zejt heal 20%/50%/75% of max
+  HP respectively when used in battle.
 - **Shop**: buy Balls and Medicine with gold earned from catching or
   defeating wild creatures.
 

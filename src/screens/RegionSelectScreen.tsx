@@ -26,7 +26,7 @@ export function RegionSelectScreen({ navigation }: Props) {
         </Text>
       </View>
 
-      <PrimaryButton label="Begin Journey" onPress={() => navigation.navigate("StarterSelect")} />
+      <PrimaryButton label="Begin Journey" onPress={() => navigation.navigate("StarterQuiz")} />
     </ScreenBackground>
   );
 }

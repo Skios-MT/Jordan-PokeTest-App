@@ -11,7 +11,8 @@ import { colors } from "./theme";
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
 const TILE_SIZE = 44;
-const ENCOUNTER_CHANCE = 0.15;
+/** Base 0.15, bumped 30% per request. */
+const ENCOUNTER_CHANCE = 0.195;
 
 type Direction = "up" | "down" | "left" | "right";
 
