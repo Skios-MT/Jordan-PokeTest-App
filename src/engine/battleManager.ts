@@ -1,5 +1,5 @@
 import type { BattleAction, BattleContext, Creature, Move } from "./types";
-import { calculateDamage } from "./damage";
+import { calculateDamage, BASE_CRIT_CHANCE } from "./damage";
 import { sortByPriority, effectivePriority, type OrderedAction } from "./priority";
 import { activateCruxAura, getCruxStatMultiplier, isImmuneToFlinchViaCrux } from "./cruxAura";
 import { tickStatusEffects } from "./statusEffects";
@@ -80,7 +80,11 @@ export function resolveAction(
     const target = opponentOf(ctx, actor);
     const move = getMove(action.moveId);
     const cruxAuraMultiplier = getCruxStatMultiplier(actor, move.category === "special" ? "spatk" : "atk");
-    const dmg = calculateDamage(actor, target, move, { cruxAuraMultiplier });
+    const dmg = calculateDamage(actor, target, move, {
+      cruxAuraMultiplier,
+      isCrit: randomSource() < BASE_CRIT_CHANCE,
+      randomFactor: 0.85 + randomSource() * 0.15,
+    });
     target.currentHp = Math.max(0, target.currentHp - dmg);
     if (move.statusEffect && move.statusEffect !== "none" && target.status === "none") {
       target.status = move.statusEffect;

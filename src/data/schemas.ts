@@ -96,6 +96,21 @@ export const MovesFileSchema = z.object({
   moves: z.array(MoveDataSchema),
 });
 
+export const ItemCategorySchema = z.enum(["balls", "medicine", "key_items", "battle_items"]);
+
+export const ItemDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: ItemCategorySchema,
+  description: z.string(),
+  catchMultiplier: z.number().positive().optional(),
+  startingQuantity: z.number().int().nonnegative().default(0),
+});
+
+export const ItemsFileSchema = z.object({
+  items: z.array(ItemDataSchema),
+});
+
 export type TypeName = z.infer<typeof TypeNameSchema>;
 export type StatBlock = z.infer<typeof StatBlockSchema>;
 export type StarterLine = z.infer<typeof StarterLineSchema>;
@@ -104,3 +119,5 @@ export type Legendary = z.infer<typeof LegendarySchema>;
 export type RegionalVariant = z.infer<typeof RegionalVariantSchema>;
 export type TypeChartFile = z.infer<typeof TypeChartFileSchema>;
 export type MoveData = z.infer<typeof MoveDataSchema>;
+export type ItemCategory = z.infer<typeof ItemCategorySchema>;
+export type ItemData = z.infer<typeof ItemDataSchema>;

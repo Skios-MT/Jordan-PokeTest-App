@@ -2,13 +2,17 @@ import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { PrimaryButton } from "./components/PrimaryButton";
+import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Title">;
 
 export function TitleScreen({ navigation }: Props) {
   return (
-    <View style={styles.container}>
+    <ScreenBackground style={styles.container}>
+      <View style={styles.crest}>
+        <Text style={styles.crestGlyph}>✛</Text>
+      </View>
       <View style={styles.titleBlock}>
         <Text style={styles.title}>Project Melita</Text>
         <Text style={styles.subtitle}>Chivalry & Antiquity</Text>
@@ -19,27 +23,39 @@ export function TitleScreen({ navigation }: Props) {
         <PrimaryButton label="Continue" onPress={() => {}} disabled variant="secondary" />
         <Text style={styles.hint}>No save file yet — Continue unlocks once persistence is wired up.</Text>
       </View>
-    </View>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 96,
+    paddingVertical: 80,
     paddingHorizontal: 24,
+  },
+  crest: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 24,
+  },
+  crestGlyph: {
+    fontSize: 34,
+    color: colors.accent,
   },
   titleBlock: {
     alignItems: "center",
-    marginTop: 48,
   },
   title: {
     color: colors.text,
     fontSize: 32,
     fontWeight: "700",
+    letterSpacing: 0.5,
   },
   subtitle: {
     color: colors.textMuted,

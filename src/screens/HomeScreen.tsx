@@ -1,58 +1,64 @@
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
-import { DEMO_BATTLE_LEVEL, getStarterStageOne } from "../game/creatureFactory";
+import { HpBar } from "./components/HpBar";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { TypeBadge } from "./components/TypeBadge";
+import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home">;
 
-function comingSoon(feature: string) {
-  Alert.alert(feature, "Not built yet in this vertical slice.");
-}
-
 export function HomeScreen({ navigation }: Props) {
   const currentZone = useGameStore((s) => s.currentZone);
-  const selectedLine = useGameStore((s) => s.selectedLine);
+  const party = useGameStore((s) => s.party);
   const battlesWon = useGameStore((s) => s.battlesWon);
 
-  const starter = selectedLine ? getStarterStageOne(selectedLine) : null;
+  const leadMember = party[0];
 
   return (
-    <View style={styles.container}>
+    <ScreenBackground style={styles.container}>
       <View style={styles.hud}>
         <Text style={styles.zoneLabel}>{currentZone}</Text>
-        {starter && (
+        {leadMember && (
           <View style={styles.partyCard}>
             <Text style={styles.partyName}>
-              {starter.name} <Text style={styles.partyLevel}>Lv. {DEMO_BATTLE_LEVEL}</Text>
+              {leadMember.displayName} <Text style={styles.partyLevel}>Lv. {leadMember.level}</Text>
             </Text>
             <View style={styles.badgeRow}>
-              {starter.types.map((t) => (
+              {leadMember.types.map((t) => (
                 <TypeBadge key={t} type={t} />
               ))}
             </View>
+            <HpBar currentHp={leadMember.currentHp} maxHp={leadMember.stats.hp} />
           </View>
         )}
         <Text style={styles.stat}>Battles won: {battlesWon}</Text>
       </View>
 
       <View style={styles.actions}>
-        <PrimaryButton label="Wild Encounter" onPress={() => navigation.navigate("Battle")} />
-        <PrimaryButton label="Party" variant="secondary" onPress={() => comingSoon("Party Management")} />
-        <PrimaryButton label="Codex" variant="secondary" onPress={() => comingSoon("Creature Codex")} />
-        <PrimaryButton label="Bag" variant="secondary" onPress={() => comingSoon("Bag / Inventory")} />
+        <PrimaryButton testID="nav-wild-encounter" label="Wild Encounter" onPress={() => navigation.navigate("Battle")} />
+        <PrimaryButton
+          testID="nav-party"
+          label="Party"
+          variant="secondary"
+          onPress={() => navigation.navigate("Party")}
+        />
+        <PrimaryButton
+          testID="nav-codex"
+          label="Codex"
+          variant="secondary"
+          onPress={() => navigation.navigate("Codex")}
+        />
+        <PrimaryButton testID="nav-bag" label="Bag" variant="secondary" onPress={() => navigation.navigate("Bag")} />
       </View>
-    </View>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: colors.background,
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingTop: 64,
@@ -73,12 +79,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
+    gap: 8,
   },
   partyName: {
     color: colors.text,
     fontSize: 20,
     fontWeight: "700",
-    marginBottom: 8,
   },
   partyLevel: {
     color: colors.textMuted,

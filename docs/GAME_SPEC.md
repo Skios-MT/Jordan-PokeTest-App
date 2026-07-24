@@ -210,14 +210,21 @@ Splash → Title → (New Game: Region Select → Starter Select) / (Continue: L
 ```
 
 **Implementation status** (`src/screens/`, wired up via `src/navigation/RootNavigator.tsx`): Title,
-Region Select, Starter Select, Home, and Battle View all exist and are navigable end to end, with
-Battle View driven by the real engine (`src/engine/battleManager.ts`) rather than mock data. Region
-Select is a single-region confirmation screen rather than a real choice — Melita's three islands
-(section 2) are one region, not several to pick between; a second region would slot in here later.
-Party Management, Codex, and Bag are stub buttons on Home ("coming soon") rather than full screens.
-The Result Screen shows win/lose only — no XP bar, catch prompt, or level-up flow yet, since there's
-no XP/leveling/catching-in-battle system wired into the UI. Move Select shows type + name only, no
-PP (PP isn't modeled in the engine) and no long-press tooltip.
+Region Select, Starter Select, Home, Battle View, Party, Codex, Bag, and a shared Creature Detail
+screen all exist and are navigable end to end. Region Select is a single-region confirmation screen
+rather than a real choice — Melita's three islands (section 2) are one region, not several to pick
+between; a second region would slot in here later.
+
+Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
+action (`src/engine/catching.ts` wired to the Bag's ball items) and randomized wild encounters
+(species and level) rather than the same fixed opponent every time. Catching adds a real party
+member (`src/game/party.ts`), which Party, Codex ("seen"/"caught" tracking), and Creature Detail
+(stats, moves, HP) all read from the same `zustand` store (`src/state/gameStore.ts`) — there's no
+separate mock data path for these screens. The Result Screen shows win/lose/caught only — no XP bar
+or level-up flow, since there's no XP/leveling system yet. Move Select shows type + name only, no PP
+(PP isn't modeled in the engine) and no long-press tooltip. The Codex/Party stat and move displays
+surface the same "not recorded yet" gaps flagged in section 3.1 (stage-1/2 starters and regional
+variants have no authored stat block) rather than inventing numbers.
 
 ### 4.2 Touch Controls
 

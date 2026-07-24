@@ -1,0 +1,49 @@
+{
+  "items": [
+    {
+      "id": "melitan_ball",
+      "name": "Melitan Ball",
+      "category": "balls",
+      "description": "The finest craftsmanship on the islands. Catch multiplier 4.0x.",
+      "catchMultiplier": 4.0,
+      "startingQuantity": 5
+    },
+    {
+      "id": "greca_trap",
+      "name": "Greca Trap",
+      "category": "balls",
+      "description": "A woven reed trap in an old Mediterranean pattern. Catch multiplier 1.5x.",
+      "catchMultiplier": 1.5,
+      "startingQuantity": 3
+    },
+    {
+      "id": "festa_trap",
+      "name": "Festa Trap",
+      "category": "balls",
+      "description": "Decorated for the summer festa. Catch multiplier 2.0x.",
+      "catchMultiplier": 2.0,
+      "startingQuantity": 1
+    },
+    {
+      "id": "pastizzi",
+      "name": "Pastizzi",
+      "category": "medicine",
+      "description": "A flaky savoury pastry sold at every ferry stop. Restores stamina — not yet consumable in battle.",
+      "startingQuantity": 3
+    },
+    {
+      "id": "silent_bell",
+      "name": "Silent Bell",
+      "category": "key_items",
+      "description": "Said to quiet the fog around the Antiquity Citadel. Not yet usable — the Citadel isn't built.",
+      "startingQuantity": 0
+    },
+    {
+      "id": "il_ghajn_charm",
+      "name": "Il-Għajn Charm",
+      "category": "key_items",
+      "description": "A ward against misfortune, drawn from real Maltese folk-belief. Purely cosmetic for now.",
+      "startingQuantity": 0
+    }
+  ]
+}

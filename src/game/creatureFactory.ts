@@ -67,4 +67,16 @@ export function otherStarterLines(line: StarterLineName): StarterLineName[] {
   return (["Grass", "Fire", "Water"] as StarterLineName[]).filter((l) => l !== line);
 }
 
+/** Picks a random wild-encounter line so the same starter choice doesn't always face the same opponent. */
+export function randomOtherStarterLine(line: StarterLineName): StarterLineName {
+  const options = otherStarterLines(line);
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+/** Wild-encounter level with +/- spread around a base, floored at 1. */
+export function randomWildLevel(baseLevel: number, spread = 3): number {
+  const offset = Math.floor(Math.random() * (spread * 2 + 1)) - spread;
+  return Math.max(1, baseLevel + offset);
+}
+
 export const ALL_STARTER_LINES = starters.map((s) => s.line);

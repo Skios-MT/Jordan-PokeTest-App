@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { PrimaryButton } from "./components/PrimaryButton";
+import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "RegionSelect">;
@@ -15,7 +16,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "RegionSelect">;
  */
 export function RegionSelectScreen({ navigation }: Props) {
   return (
-    <View style={styles.container}>
+    <ScreenBackground style={styles.container}>
       <Text style={styles.eyebrow}>Region</Text>
       <View style={styles.card}>
         <Text style={styles.regionName}>Melita</Text>
@@ -26,14 +27,12 @@ export function RegionSelectScreen({ navigation }: Props) {
       </View>
 
       <PrimaryButton label="Begin Journey" onPress={() => navigation.navigate("StarterSelect")} />
-    </View>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,

@@ -34,3 +34,28 @@ export const TYPE_COLORS: Record<string, string> = {
 export function typeColor(type: string): string {
   return TYPE_COLORS[type] ?? colors.surfaceAlt;
 }
+
+export const TYPE_ICONS: Record<string, string> = {
+  Steel: "⚙",
+  Ghost: "👻",
+  Psychic: "🔮",
+  Rock: "🪨",
+  Water: "💧",
+  Fire: "🔥",
+  Grass: "🌿",
+  Electric: "⚡",
+  Ground: "⛰",
+  Flying: "🕊",
+  Fighting: "👊",
+  Fairy: "✨",
+  Ice: "❄",
+  Bug: "🐛",
+  Poison: "☠",
+  Normal: "⚪",
+  Dark: "🌑",
+  Dragon: "🐉",
+};
+
+export function typeIcon(type: string): string {
+  return TYPE_ICONS[type] ?? "❔";
+}

@@ -1,20 +1,23 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
 import {
   buildStarterParticipant,
-  otherStarterLines,
+  randomOtherStarterLine,
+  randomWildLevel,
   DEMO_BATTLE_LEVEL,
   type BattleParticipant,
-  type StarterLineName,
 } from "../game/creatureFactory";
+import { creatureFromPartyMember, partyMemberFromParticipant, type PartyMember } from "../game/party";
 import { getMove } from "../game/movesRepo";
+import { pickBestAvailableBall } from "../game/itemsRepo";
 import { BattleStateMachine, type Winner } from "../engine/battleManager";
+import { attemptCatch, type ContainerType } from "../engine/catching";
 import { isCruxOnCooldown, CRUX_AURA_STATUS_ID } from "../engine/cruxAura";
 import { getActiveEffect } from "../engine/statusEffects";
-import type { BattleContext } from "../engine/types";
+import type { BattleAction, BattleContext } from "../engine/types";
 import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
 import { PrimaryButton } from "./components/PrimaryButton";
@@ -22,8 +25,11 @@ import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Battle">;
 
-const ENEMY_LEVEL = Math.max(1, DEMO_BATTLE_LEVEL - 2);
+const ENEMY_BASE_LEVEL = Math.max(1, DEMO_BATTLE_LEVEL - 2);
+const WILD_BASE_CATCH_RATE = 190;
 const MAX_LOG_LINES = 5;
+
+type Outcome = Winner | "caught";
 
 interface BattleSnapshot {
   playerHp: number;
@@ -47,20 +53,39 @@ function snapshotFrom(ctx: BattleContext): BattleSnapshot {
 
 export function BattleScreen({ navigation }: Props) {
   const selectedLine = useGameStore((s) => s.selectedLine) ?? "Water";
+  const inventory = useGameStore((s) => s.inventory);
   const recordBattleResult = useGameStore((s) => s.recordBattleResult);
+  const updatePartyMemberHp = useGameStore((s) => s.updatePartyMemberHp);
+  const consumeItem = useGameStore((s) => s.consumeItem);
+  const catchCreature = useGameStore((s) => s.catchCreature);
+  const markSeen = useGameStore((s) => s.markSeen);
+  const party = useGameStore((s) => s.party);
 
-  const player = useMemo<BattleParticipant>(
-    () => buildStarterParticipant(selectedLine, DEMO_BATTLE_LEVEL, "player-1"),
-    [selectedLine]
-  );
-  const wildLine = useMemo<StarterLineName>(() => otherStarterLines(selectedLine)[0], [selectedLine]);
+  const playerMemberRef = useRef<PartyMember | undefined>(party[0]);
+  const playerMember = playerMemberRef.current;
+
+  const player = useMemo<BattleParticipant | null>(() => {
+    if (!playerMember) return null;
+    return {
+      creature: creatureFromPartyMember(playerMember),
+      moveIds: playerMember.moveIds,
+      displayName: playerMember.displayName,
+    };
+  }, [playerMember]);
+
+  const wildLine = useMemo(() => randomOtherStarterLine(selectedLine), [selectedLine]);
   const enemy = useMemo<BattleParticipant>(
-    () => buildStarterParticipant(wildLine, ENEMY_LEVEL, "enemy-1"),
+    () =>
+      buildStarterParticipant(
+        wildLine,
+        randomWildLevel(ENEMY_BASE_LEVEL),
+        `enemy-${Math.random().toString(36).slice(2, 8)}`
+      ),
     [wildLine]
   );
 
   const fsmRef = useRef<BattleStateMachine | null>(null);
-  if (!fsmRef.current) {
+  if (!fsmRef.current && player) {
     const ctx: BattleContext = {
       playerActive: player.creature,
       enemyActive: enemy.creature,
@@ -72,10 +97,14 @@ export function BattleScreen({ navigation }: Props) {
   }
   const fsm = fsmRef.current;
 
-  const [snapshot, setSnapshot] = useState<BattleSnapshot>(() => snapshotFrom(fsm.getContext()));
+  const [snapshot, setSnapshot] = useState<BattleSnapshot | null>(() => (fsm ? snapshotFrom(fsm.getContext()) : null));
   const [log, setLog] = useState<string[]>([`A wild ${enemy.displayName} appeared!`]);
-  const [winner, setWinner] = useState<Winner>(null);
+  const [outcome, setOutcome] = useState<Outcome>(null);
   const [showParty, setShowParty] = useState(false);
+
+  useEffect(() => {
+    markSeen(enemy.creature.speciesId);
+  }, [enemy.creature.speciesId, markSeen]);
 
   function pushLog(lines: string[]) {
     setLog((prev) => [...prev, ...lines].slice(-MAX_LOG_LINES));
@@ -86,7 +115,8 @@ export function BattleScreen({ navigation }: Props) {
     return ids[Math.floor(Math.random() * ids.length)];
   }
 
-  function runTurn(playerAction: Parameters<BattleStateMachine["submitActions"]>[0], logLines: string[]) {
+  function runTurn(playerAction: BattleAction, logLines: string[]) {
+    if (!fsm || !player || !playerMember) return;
     const ctx = fsm.getContext();
     const enemyMoveId = pickEnemyMoveId();
     const enemyMoveName = getMove(enemyMoveId).name;
@@ -100,26 +130,75 @@ export function BattleScreen({ navigation }: Props) {
 
     setSnapshot(nextSnapshot);
     pushLog(lines);
+    updatePartyMemberHp(playerMember.uid, nextSnapshot.playerHp);
 
     if (fsm.getState() === "BATTLE_END") {
       const result: Winner = nextSnapshot.enemyHp <= 0 ? "player" : "enemy";
-      setWinner(result);
+      setOutcome(result);
       recordBattleResult(result === "player");
     }
   }
 
   function handleMove(moveId: string, moveName: string) {
-    if (winner || fsm.getState() !== "ACTION_SELECT") return;
+    if (outcome || !fsm || fsm.getState() !== "ACTION_SELECT") return;
     const ctx = fsm.getContext();
     runTurn({ kind: "move", actorId: ctx.playerActive.id, moveId }, [`You used ${moveName}.`]);
   }
 
   function handleInvokeCrux() {
-    if (winner || fsm.getState() !== "ACTION_SELECT" || snapshot.playerCruxOnCooldown) return;
+    if (!fsm || !player || !snapshot || outcome) return;
+    if (fsm.getState() !== "ACTION_SELECT" || snapshot.playerCruxOnCooldown) return;
     const ctx = fsm.getContext();
     runTurn({ kind: "invoke_crux", actorId: ctx.playerActive.id }, [
       `${player.displayName} invokes the Crux Aura!`,
     ]);
+  }
+
+  const availableBall = pickBestAvailableBall(inventory);
+
+  function handleCatch() {
+    if (!fsm || !player || !playerMember || outcome || fsm.getState() !== "ACTION_SELECT" || !availableBall) return;
+    const ctx = fsm.getContext();
+    const enemyCreature = ctx.enemyActive;
+
+    const result = attemptCatch({
+      maxHp: enemyCreature.stats.hp,
+      currentHp: enemyCreature.currentHp,
+      baseCatchRate: WILD_BASE_CATCH_RATE,
+      container: availableBall.id as ContainerType,
+      status: enemyCreature.status,
+    });
+    consumeItem(availableBall.id);
+
+    if (result.caught) {
+      const member = partyMemberFromParticipant(enemy, "starter");
+      const added = catchCreature(member);
+      pushLog([
+        `You threw a ${availableBall.name}!`,
+        added
+          ? `Gotcha! Wild ${enemy.displayName} was caught!`
+          : `Gotcha! ...but your party is full (6/6), so it couldn't be kept.`,
+      ]);
+      updatePartyMemberHp(playerMember.uid, ctx.playerActive.currentHp);
+      setOutcome("caught");
+      return;
+    }
+
+    runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId: availableBall.id }, [
+      `You threw a ${availableBall.name}! It broke free after ${result.shakesPassed} shake${
+        result.shakesPassed === 1 ? "" : "s"
+      }.`,
+    ]);
+  }
+
+  if (!player || !fsm || !snapshot) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.resultTitle}>No active party member</Text>
+        <Text style={styles.resultSubtitle}>Head back to Home and pick a starter first.</Text>
+        <PrimaryButton label="Return to Home" onPress={() => navigation.goBack()} />
+      </View>
+    );
   }
 
   const playerMoves = player.moveIds.map(getMove);
@@ -158,7 +237,7 @@ export function BattleScreen({ navigation }: Props) {
             key={move.id}
             testID={`move-${move.id}`}
             onPress={() => handleMove(move.id, move.name)}
-            disabled={!!winner}
+            disabled={!!outcome}
             style={({ pressed }) => [styles.moveButton, pressed && styles.moveButtonPressed]}
           >
             <Text style={styles.moveName}>{move.name}</Text>
@@ -168,16 +247,30 @@ export function BattleScreen({ navigation }: Props) {
         <Pressable
           testID="invoke-crux"
           onPress={handleInvokeCrux}
-          disabled={!!winner || snapshot.playerCruxOnCooldown}
+          disabled={!!outcome || snapshot.playerCruxOnCooldown}
           style={({ pressed }) => [
             styles.moveButton,
             styles.cruxButton,
-            (snapshot.playerCruxOnCooldown || winner) && styles.moveButtonDisabled,
+            (snapshot.playerCruxOnCooldown || outcome) && styles.moveButtonDisabled,
             pressed && styles.moveButtonPressed,
           ]}
         >
           <Text style={styles.moveName}>Invoke Crux</Text>
           <Text style={styles.cruxHint}>{snapshot.playerCruxOnCooldown ? "on cooldown" : "costs the turn"}</Text>
+        </Pressable>
+        <Pressable
+          testID="catch-ball"
+          onPress={handleCatch}
+          disabled={!!outcome || !availableBall}
+          style={({ pressed }) => [
+            styles.moveButton,
+            styles.catchButton,
+            (!!outcome || !availableBall) && styles.moveButtonDisabled,
+            pressed && styles.moveButtonPressed,
+          ]}
+        >
+          <Text style={styles.moveName}>{availableBall ? `Throw ${availableBall.name}` : "No balls left"}</Text>
+          <Text style={styles.cruxHint}>{availableBall ? "costs the turn if it fails" : "check your Bag"}</Text>
         </Pressable>
         <Pressable
           testID="open-party-sheet"
@@ -192,25 +285,35 @@ export function BattleScreen({ navigation }: Props) {
         <View style={styles.sheetBackdrop}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>Party</Text>
-            <View style={styles.sheetRow}>
-              <Text style={styles.sheetCreature}>{player.displayName}</Text>
-              <Text style={styles.sheetHp}>
-                {snapshot.playerHp} / {snapshot.playerMaxHp} HP
-              </Text>
-            </View>
-            <Text style={styles.sheetNote}>No other party members yet — switching isn't wired up.</Text>
+            {party.map((member) => (
+              <View key={member.uid} style={styles.sheetRow}>
+                <Text style={styles.sheetCreature}>
+                  {member.displayName} <Text style={styles.sheetLevel}>Lv. {member.level}</Text>
+                </Text>
+                <Text style={styles.sheetHp}>
+                  {member.uid === playerMember?.uid ? snapshot.playerHp : member.currentHp} / {member.stats.hp} HP
+                </Text>
+              </View>
+            ))}
+            <Text style={styles.sheetNote}>
+              {party.length > 1
+                ? "Switching mid-battle isn't wired up yet — your first party member always leads."
+                : "No other party members yet — try catching one!"}
+            </Text>
             <PrimaryButton label="Close" variant="secondary" onPress={() => setShowParty(false)} />
           </View>
         </View>
       </Modal>
 
-      {winner && (
+      {outcome && (
         <View style={styles.resultOverlay}>
-          <Text style={styles.resultTitle}>{winner === "player" ? "Victory!" : "You blacked out..."}</Text>
+          <Text style={styles.resultTitle}>
+            {outcome === "player" ? "Victory!" : outcome === "caught" ? "Gotcha!" : "You blacked out..."}
+          </Text>
           <Text style={styles.resultSubtitle}>
-            {winner === "player"
-              ? `${player.displayName} defeated the wild ${enemy.displayName}.`
-              : `${player.displayName} has no energy left to battle.`}
+            {outcome === "player" && `${player.displayName} defeated the wild ${enemy.displayName}.`}
+            {outcome === "caught" && `Wild ${enemy.displayName} joined your party.`}
+            {outcome === "enemy" && `${player.displayName} has no energy left to battle.`}
           </Text>
           <PrimaryButton testID="return-to-home" label="Return to Home" onPress={() => navigation.goBack()} />
         </View>
@@ -258,6 +361,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 56,
     paddingBottom: 20,
+    gap: 12,
   },
   combatants: {
     gap: 12,
@@ -300,7 +404,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surfaceAlt,
     borderRadius: 12,
-    marginVertical: 14,
     padding: 12,
   },
   logContent: {
@@ -339,6 +442,9 @@ const styles = StyleSheet.create({
   cruxButton: {
     borderColor: colors.accent,
   },
+  catchButton: {
+    borderColor: colors.success,
+  },
   cruxHint: {
     color: colors.textMuted,
     fontSize: 11,
@@ -371,6 +477,11 @@ const styles = StyleSheet.create({
   sheetCreature: {
     color: colors.text,
     fontSize: 15,
+  },
+  sheetLevel: {
+    color: colors.textMuted,
+    fontWeight: "400",
+    fontSize: 12,
   },
   sheetHp: {
     color: colors.textMuted,

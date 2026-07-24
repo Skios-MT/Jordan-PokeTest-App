@@ -7,6 +7,7 @@ import type { StarterLineName } from "../game/creatureFactory";
 import { useGameStore } from "../state/gameStore";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { TypeBadge } from "./components/TypeBadge";
+import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "StarterSelect">;
@@ -23,7 +24,7 @@ export function StarterSelectScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
+    <ScreenBackground style={styles.container}>
       <Text style={styles.title}>Choose your first partner</Text>
       <ScrollView contentContainerStyle={styles.list}>
         {starters.map((starter) => {
@@ -33,7 +34,11 @@ export function StarterSelectScreen({ navigation }: Props) {
             <Pressable
               key={starter.line}
               onPress={() => selectStarter(starter.line as StarterLineName)}
-              style={[styles.card, isSelected && styles.cardSelected]}
+              style={({ pressed }) => [
+                styles.card,
+                isSelected && styles.cardSelected,
+                pressed && styles.cardPressed,
+              ]}
             >
               <Text style={styles.name}>{stageOne.name}</Text>
               <View style={styles.badgeRow}>
@@ -48,14 +53,12 @@ export function StarterSelectScreen({ navigation }: Props) {
       </ScrollView>
 
       <PrimaryButton label="Confirm" onPress={handleConfirm} disabled={!selectedLine} />
-    </View>
+    </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: colors.background,
     paddingHorizontal: 20,
     paddingTop: 64,
     paddingBottom: 24,
@@ -77,9 +80,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
     padding: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   cardSelected: {
     borderColor: colors.accent,
+  },
+  cardPressed: {
+    opacity: 0.85,
   },
   name: {
     color: colors.text,
