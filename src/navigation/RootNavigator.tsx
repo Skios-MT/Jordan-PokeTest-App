@@ -5,6 +5,7 @@ import { TitleScreen } from "../screens/TitleScreen";
 import { RegionSelectScreen } from "../screens/RegionSelectScreen";
 import { StarterSelectScreen } from "../screens/StarterSelectScreen";
 import { HomeScreen } from "../screens/HomeScreen";
+import { MapScreen } from "../screens/MapScreen";
 import { BattleScreen } from "../screens/BattleScreen";
 import { PartyScreen } from "../screens/PartyScreen";
 import { CodexScreen } from "../screens/CodexScreen";
@@ -22,6 +23,7 @@ export function RootNavigator() {
         <Stack.Screen name="RegionSelect" component={RegionSelectScreen} />
         <Stack.Screen name="StarterSelect" component={StarterSelectScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Map" component={MapScreen} />
         <Stack.Screen name="Battle" component={BattleScreen} options={{ presentation: "fullScreenModal" }} />
         <Stack.Screen name="Party" component={PartyScreen} />
         <Stack.Screen name="Codex" component={CodexScreen} />

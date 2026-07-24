@@ -4,19 +4,25 @@
       "id": "ferrocane",
       "name": "Ferrocane",
       "types": ["Electric", "Fire"],
-      "flavor": "Fortress guard-hound, lightning-forged"
+      "flavor": "Fortress guard-hound, lightning-forged",
+      "baseStats": { "hp": 80, "atk": 90, "def": 70, "spatk": 95, "spdef": 75, "speed": 100 },
+      "moveIds": ["spark", "ember", "tackle"]
     },
     {
       "id": "katakomba",
       "name": "Katakomba",
       "types": ["Rock", "Ghost"],
-      "flavor": "Petrified catacomb sentinel"
+      "flavor": "Petrified catacomb sentinel",
+      "baseStats": { "hp": 95, "atk": 85, "def": 110, "spatk": 60, "spdef": 90, "speed": 40 },
+      "moveIds": ["rock_throw", "shadow_snap", "tackle"]
     },
     {
       "id": "zavorra",
       "name": "Zavorra",
       "types": ["Water", "Steel"],
-      "flavor": "Ballast-reef, shipwreck-adapted"
+      "flavor": "Ballast-reef, shipwreck-adapted",
+      "baseStats": { "hp": 85, "atk": 75, "def": 105, "spatk": 65, "spdef": 95, "speed": 55 },
+      "moveIds": ["water_jet", "metal_claw", "tackle"]
     }
   ]
 }

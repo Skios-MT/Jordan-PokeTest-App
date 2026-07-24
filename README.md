@@ -24,21 +24,24 @@ src/game/              Bridges data -> engine: move/item lookup, creature
                         factory, party model, species catalog (Codex data)
 src/state/             zustand game store (party, inventory, seen/caught, zone)
 src/navigation/         React Navigation stack + route param types
-src/screens/            Title, Region Select, Starter Select, Home, Battle
-                        View, Party, Codex, Bag, Creature Detail
+src/screens/            Title, Region Select, Starter Select, Home, Map,
+                        Battle View, Party, Codex, Bag, Creature Detail
 src/db/                SQLite persistence schema
 App.tsx                Expo entry point, renders the navigator
 ```
 
 ### Screens implemented
 
-Title -> New Game -> Region Select -> Starter Select -> Home, with Battle
-View, Party, Codex, and Bag all reachable from Home, matching spec 4.1.
+Title -> New Game -> Region Select -> Starter Select -> Home, with Map,
+Battle View, Party, Codex, and Bag all reachable from Home, matching spec 4.1.
 
+- **Map**: a small walkable tile grid for Melita Woods with a 4-directional
+  D-pad and a player avatar. Walking onto tall grass has a chance to trigger
+  a wild battle.
 - **Battle View**: pick a move, Invoke Crux, throw a ball to catch the wild
   creature, or open the Party sheet — all driven by the real engine, not
-  mock data. Wild encounters are randomized (species and level) rather than
-  always the same fight.
+  mock data. Wild encounters are drawn from a weighted encounter table
+  (species and level vary) rather than always the same fight.
 - **Party**: lists every caught creature; tap one for its Creature Detail
   (stats, HP, known moves).
 - **Codex**: a grid of all known species; unseen ones show as "???" until
@@ -47,11 +50,14 @@ View, Party, Codex, and Bag all reachable from Home, matching spec 4.1.
   functionally wired to the catch mechanic; Medicine and Key Items are
   inventory-only (not yet consumable).
 
+The creature roster now includes one original wild species (Fossary,
+Bug/Grass) plus the three regional variants, all fully battle-ready with
+real stats and movesets.
+
 Not built: XP/leveling (so no level-up flow or XP bar on the result
 screen), PP tracking or move tooltips, party reordering/switching mid-battle,
-a map/overworld, and a wild-encounter table beyond "the other two starter
-lines" — expanding the creature roster is the natural next step to make
-Codex and encounters more interesting.
+tap-to-pathfind movement (the map uses a D-pad instead), multiple zones, and
+sprite/character art (the avatar is a directional glyph, not art).
 
 ### Getting started
 

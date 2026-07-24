@@ -1,0 +1,13 @@
+{
+  "wildCreatures": [
+    {
+      "id": "fossary",
+      "name": "Fossary",
+      "types": ["Bug", "Grass"],
+      "flavor": "A garrigue-shell beetle that grazes the Buskett scrubland; the ridges on its back are said to mirror the megaliths.",
+      "baseStats": { "hp": 70, "atk": 75, "def": 80, "spatk": 55, "spdef": 70, "speed": 65 },
+      "moveIds": ["bug_bite", "vine_lash", "tackle"],
+      "zone": "Melita Woods"
+    }
+  ]
+}

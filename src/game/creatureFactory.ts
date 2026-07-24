@@ -1,5 +1,5 @@
 import startersData from "../data/starters.json";
-import { StartersFileSchema, type StarterLine } from "../data/schemas";
+import { StartersFileSchema, type StarterLine, type StatBlock, type TypeName } from "../data/schemas";
 import type { Creature } from "../engine/types";
 import { NEUTRAL_STAT_STAGES } from "../engine/types";
 import { STARTER_MOVESETS } from "./movesRepo";
@@ -15,6 +15,31 @@ export interface BattleParticipant {
   creature: Creature;
   moveIds: string[];
   displayName: string;
+}
+
+/** Shared Creature-construction path for anything battle-ready: starters, regional variants, wild species. */
+export function buildParticipant(
+  instanceId: string,
+  speciesId: string,
+  displayName: string,
+  types: TypeName[],
+  stats: StatBlock,
+  level: number,
+  moveIds: string[]
+): BattleParticipant {
+  const creature: Creature = {
+    id: instanceId,
+    speciesId,
+    level,
+    types,
+    stats: { ...stats },
+    statStages: { ...NEUTRAL_STAT_STAGES },
+    currentHp: stats.hp,
+    status: "none",
+    flinched: false,
+    activeEffects: [],
+  };
+  return { creature, moveIds, displayName };
 }
 
 function getStarterLine(line: StarterLineName): StarterLine {
@@ -38,25 +63,15 @@ export function buildStarterParticipant(
 ): BattleParticipant {
   const starterLine = getStarterLine(line);
   const stageOne = starterLine.stages[0];
-
-  const creature: Creature = {
-    id: instanceId,
-    speciesId: stageOne.id,
+  return buildParticipant(
+    instanceId,
+    stageOne.id,
+    stageOne.name,
+    stageOne.types,
+    starterLine.baseStatsFinal,
     level,
-    types: stageOne.types,
-    stats: { ...starterLine.baseStatsFinal },
-    statStages: { ...NEUTRAL_STAT_STAGES },
-    currentHp: starterLine.baseStatsFinal.hp,
-    status: "none",
-    flinched: false,
-    activeEffects: [],
-  };
-
-  return {
-    creature,
-    moveIds: STARTER_MOVESETS[line],
-    displayName: stageOne.name,
-  };
+    STARTER_MOVESETS[line]
+  );
 }
 
 export function getStarterStageOne(line: StarterLineName) {

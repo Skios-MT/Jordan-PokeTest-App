@@ -38,7 +38,7 @@ export function HomeScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.actions}>
-        <PrimaryButton testID="nav-wild-encounter" label="Wild Encounter" onPress={() => navigation.navigate("Battle")} />
+        <PrimaryButton testID="nav-explore" label="Explore Melita Woods" onPress={() => navigation.navigate("Map")} />
         <PrimaryButton
           testID="nav-party"
           label="Party"

@@ -7,6 +7,7 @@ export type RootStackParamList = {
   RegionSelect: undefined;
   StarterSelect: undefined;
   Home: undefined;
+  Map: undefined;
   Battle: undefined;
   Party: undefined;
   Codex: undefined;

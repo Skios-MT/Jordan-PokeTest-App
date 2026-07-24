@@ -1,15 +1,17 @@
 import startersData from "../data/starters.json";
 import legendariesData from "../data/legendaries.json";
 import regionalVariantsData from "../data/regionalVariants.json";
+import wildCreaturesData from "../data/wildCreatures.json";
 import {
   StartersFileSchema,
   LegendariesFileSchema,
   RegionalVariantsFileSchema,
+  WildCreaturesFileSchema,
   type StatBlock,
   type TypeName,
 } from "../data/schemas";
 
-export type DexCategory = "starter" | "legendary" | "regional";
+export type DexCategory = "starter" | "legendary" | "regional" | "wild";
 
 export interface DexEntry {
   speciesId: string;
@@ -26,6 +28,7 @@ export interface DexEntry {
 const starters = StartersFileSchema.parse(startersData).starters;
 const legendaries = LegendariesFileSchema.parse(legendariesData).legendaries;
 const regionalVariants = RegionalVariantsFileSchema.parse(regionalVariantsData).regionalVariants;
+const wildCreatures = WildCreaturesFileSchema.parse(wildCreaturesData).wildCreatures;
 
 const starterEntries: DexEntry[] = starters.flatMap((line) =>
   line.stages.map((stage) => ({
@@ -56,9 +59,19 @@ const regionalEntries: DexEntry[] = regionalVariants.map((v) => ({
   types: v.types,
   category: "regional" as const,
   flavor: v.flavor,
+  stats: v.baseStats,
 }));
 
-export const DEX_ENTRIES: DexEntry[] = [...starterEntries, ...regionalEntries, ...legendaryEntries];
+const wildEntries: DexEntry[] = wildCreatures.map((w) => ({
+  speciesId: w.id,
+  name: w.name,
+  types: w.types,
+  category: "wild" as const,
+  flavor: w.flavor,
+  stats: w.baseStats,
+}));
+
+export const DEX_ENTRIES: DexEntry[] = [...starterEntries, ...wildEntries, ...regionalEntries, ...legendaryEntries];
 
 export function getDexEntry(speciesId: string): DexEntry | undefined {
   return DEX_ENTRIES.find((e) => e.speciesId === speciesId);

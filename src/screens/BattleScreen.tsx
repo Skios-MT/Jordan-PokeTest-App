@@ -3,13 +3,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
-import {
-  buildStarterParticipant,
-  randomOtherStarterLine,
-  randomWildLevel,
-  DEMO_BATTLE_LEVEL,
-  type BattleParticipant,
-} from "../game/creatureFactory";
+import type { BattleParticipant } from "../game/creatureFactory";
+import { buildMelitaWoodsEncounterTable, rollEncounter } from "../game/encounterTable";
 import { creatureFromPartyMember, partyMemberFromParticipant, type PartyMember } from "../game/party";
 import { getMove } from "../game/movesRepo";
 import { pickBestAvailableBall } from "../game/itemsRepo";
@@ -25,7 +20,6 @@ import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Battle">;
 
-const ENEMY_BASE_LEVEL = Math.max(1, DEMO_BATTLE_LEVEL - 2);
 const WILD_BASE_CATCH_RATE = 190;
 const MAX_LOG_LINES = 5;
 
@@ -73,15 +67,10 @@ export function BattleScreen({ navigation }: Props) {
     };
   }, [playerMember]);
 
-  const wildLine = useMemo(() => randomOtherStarterLine(selectedLine), [selectedLine]);
+  const encounterTable = useMemo(() => buildMelitaWoodsEncounterTable(selectedLine), [selectedLine]);
   const enemy = useMemo<BattleParticipant>(
-    () =>
-      buildStarterParticipant(
-        wildLine,
-        randomWildLevel(ENEMY_BASE_LEVEL),
-        `enemy-${Math.random().toString(36).slice(2, 8)}`
-      ),
-    [wildLine]
+    () => rollEncounter(encounterTable, `enemy-${Math.random().toString(36).slice(2, 8)}`),
+    [encounterTable]
   );
 
   const fsmRef = useRef<BattleStateMachine | null>(null);
@@ -196,7 +185,7 @@ export function BattleScreen({ navigation }: Props) {
       <View style={styles.container}>
         <Text style={styles.resultTitle}>No active party member</Text>
         <Text style={styles.resultSubtitle}>Head back to Home and pick a starter first.</Text>
-        <PrimaryButton label="Return to Home" onPress={() => navigation.goBack()} />
+        <PrimaryButton label="Return to Home" onPress={() => navigation.popToTop()} />
       </View>
     );
   }
@@ -315,7 +304,7 @@ export function BattleScreen({ navigation }: Props) {
             {outcome === "caught" && `Wild ${enemy.displayName} joined your party.`}
             {outcome === "enemy" && `${player.displayName} has no energy left to battle.`}
           </Text>
-          <PrimaryButton testID="return-to-home" label="Return to Home" onPress={() => navigation.goBack()} />
+          <PrimaryButton testID="return-to-home" label="Return to Home" onPress={() => navigation.popToTop()} />
         </View>
       )}
     </View>

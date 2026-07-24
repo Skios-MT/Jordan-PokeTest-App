@@ -69,6 +69,8 @@ export const RegionalVariantSchema = z.object({
   name: z.string(),
   types: z.array(TypeNameSchema).min(1).max(2),
   flavor: z.string(),
+  baseStats: StatBlockSchema,
+  moveIds: z.array(z.string()).min(1).max(4),
 });
 
 export const RegionalVariantsFileSchema = z.object({
@@ -111,6 +113,20 @@ export const ItemsFileSchema = z.object({
   items: z.array(ItemDataSchema),
 });
 
+export const WildCreatureSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  types: z.array(TypeNameSchema).min(1).max(2),
+  flavor: z.string(),
+  baseStats: StatBlockSchema,
+  moveIds: z.array(z.string()).min(1).max(4),
+  zone: z.string(),
+});
+
+export const WildCreaturesFileSchema = z.object({
+  wildCreatures: z.array(WildCreatureSchema),
+});
+
 export type TypeName = z.infer<typeof TypeNameSchema>;
 export type StatBlock = z.infer<typeof StatBlockSchema>;
 export type StarterLine = z.infer<typeof StarterLineSchema>;
@@ -121,3 +137,4 @@ export type TypeChartFile = z.infer<typeof TypeChartFileSchema>;
 export type MoveData = z.infer<typeof MoveDataSchema>;
 export type ItemCategory = z.infer<typeof ItemCategorySchema>;
 export type ItemData = z.infer<typeof ItemDataSchema>;
+export type WildCreature = z.infer<typeof WildCreatureSchema>;
