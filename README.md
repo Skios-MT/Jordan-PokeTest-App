@@ -108,3 +108,22 @@ npm test         # run the engine unit tests
 npm run typecheck # tsc --noEmit
 npm start        # launch the Expo dev server
 ```
+
+### Testing on a phone (web build, no install needed)
+
+The web export is also published to the `gh-pages` branch so it can be opened
+directly in a phone's browser, no Expo Go or cable required:
+
+```bash
+npx expo export --platform web   # produces dist/
+```
+
+The exported `dist/index.html` and JS bundle reference assets with
+absolute (`/...`) paths, which only work when hosted at a domain root. Since
+GitHub Pages serves a project page at a subpath (`/<repo-name>/`), those
+references are rewritten to relative (`./...`) paths before publishing to
+`gh-pages`, so the same export works unmodified when run locally at
+`localhost` and when hosted under a subpath. Once GitHub Pages is enabled for
+this repo (Settings -> Pages -> Deploy from a branch -> `gh-pages` / `/`
+(root)), the build is reachable at
+`https://skios-mt.github.io/Jordan-PokeTest-App/`.
