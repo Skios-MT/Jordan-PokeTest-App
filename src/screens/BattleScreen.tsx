@@ -24,6 +24,7 @@ import { CreatureAvatar } from "./components/CreatureAvatar";
 import { useCombatantAnimation } from "./components/useCombatantAnimation";
 import { HoverTip } from "./components/HoverTip";
 import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
+import { LevelUpModal, type LevelUpRevealData } from "./components/LevelUpModal";
 import { colors } from "./theme";
 
 /** Chance a defeated or caught wild creature drops a Kinnie — rare, never sold. */
@@ -132,6 +133,11 @@ export function BattleScreen({ navigation }: Props) {
   const [showItems, setShowItems] = useState(false);
   const [forcedSwitchPending, setForcedSwitchPending] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [levelUpReveal, setLevelUpReveal] = useState<LevelUpRevealData | null>(null);
+  /** Set when a level-up needs to finish resolving (mutating ctx, consuming the item,
+   * continuing the turn) only once the player dismisses the LevelUpModal — e.g. using a
+   * Kinnie mid-battle should pause on the stat-comparison screen before the enemy's turn plays. */
+  const afterLevelUpDismissRef = useRef<(() => void) | null>(null);
 
   const playerAnim = useCombatantAnimation();
   const enemyAnim = useCombatantAnimation();
@@ -167,6 +173,11 @@ export function BattleScreen({ navigation }: Props) {
     const money = currencyRewardForLevel(enemy.creature.level);
     const xp = xpRewardForLevel(enemy.creature.level);
     earnCurrency(money);
+
+    // Snapshot "before" stats off the current store state, ahead of grantExperience applying the level-up.
+    const memberBefore = party.find((m) => m.uid === finalCtx.playerActive.id);
+    const oldStats = memberBefore ? partyMemberStats(memberBefore) : null;
+
     const xpResult: ExperienceGainResult | null = grantExperience(finalCtx.playerActive.id, xp);
     const kinnieDropped = rollKinnieDrop();
     setRewards({
@@ -176,6 +187,25 @@ export function BattleScreen({ navigation }: Props) {
       newLevel: xpResult?.newLevel,
       kinnieDropped,
     });
+
+    if (xpResult?.leveledUp && memberBefore && oldStats) {
+      setLevelUpReveal({
+        speciesId: memberBefore.speciesId,
+        types: memberBefore.types,
+        displayName: memberBefore.displayName,
+        oldLevel: memberBefore.level,
+        newLevel: xpResult.newLevel,
+        oldStats,
+        newStats: partyMemberStats(xpResult.member),
+      });
+    }
+  }
+
+  function handleDismissLevelUp() {
+    setLevelUpReveal(null);
+    const pending = afterLevelUpDismissRef.current;
+    afterLevelUpDismissRef.current = null;
+    pending?.();
   }
 
   function labelForCreature(creature: Creature, playerActiveId: string): string {
@@ -348,23 +378,40 @@ export function BattleScreen({ navigation }: Props) {
     }
 
     if (item.effect === "level_up") {
+      const oldStats = partyMemberStats(activeMember);
+      const oldLevel = activeMember.level;
       const prevMaxHp = ctx.playerActive.stats.hp;
-      const newLevel = ctx.playerActive.level + 1;
+      const newLevel = oldLevel + 1;
       const newStats = effectiveStats(activeMember.baseStats, newLevel);
-      const hpGain = newStats.hp - prevMaxHp;
-      ctx.playerActive.level = newLevel;
-      ctx.playerActive.stats = newStats;
-      ctx.playerActive.currentHp = Math.min(newStats.hp, ctx.playerActive.currentHp + hpGain);
 
-      consumeItem(itemId);
-      bumpPartyMemberLevel(ctx.playerActive.id);
       setShowItems(false);
-      playerAnim.heal();
+      setLevelUpReveal({
+        speciesId: activeMember.speciesId,
+        types: activeMember.types,
+        displayName: name,
+        oldLevel,
+        newLevel,
+        oldStats,
+        newStats,
+      });
 
-      runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
-        `You used the ${item.name}!`,
-        `${name} grew to level ${newLevel}!`,
-      ]);
+      // Defer applying the level-up (and the turn it costs) until the player dismisses
+      // the stat-comparison screen — the enemy's move shouldn't play out underneath it.
+      afterLevelUpDismissRef.current = () => {
+        const hpGain = newStats.hp - prevMaxHp;
+        ctx.playerActive.level = newLevel;
+        ctx.playerActive.stats = newStats;
+        ctx.playerActive.currentHp = Math.min(newStats.hp, ctx.playerActive.currentHp + hpGain);
+
+        consumeItem(itemId);
+        bumpPartyMemberLevel(ctx.playerActive.id);
+        playerAnim.heal();
+
+        runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
+          `You used the ${item.name}!`,
+          `${name} grew to level ${newLevel}!`,
+        ]);
+      };
     }
   }
 
@@ -654,7 +701,11 @@ export function BattleScreen({ navigation }: Props) {
         </View>
       )}
 
-      {outcome && (
+      {/* The level-up stat comparison takes priority — the battle result pop-up appears
+          once it's dismissed, so a level-up from the battle's XP is never hidden behind it. */}
+      {levelUpReveal && <LevelUpModal data={levelUpReveal} onDismiss={handleDismissLevelUp} />}
+
+      <Modal visible={!!outcome && !levelUpReveal} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={styles.resultOverlay}>
           <Text style={styles.resultTitle}>
             {outcome === "player"
@@ -680,7 +731,7 @@ export function BattleScreen({ navigation }: Props) {
           )}
           <PrimaryButton testID="return-to-home" label="Return to Home" onPress={() => navigation.popToTop()} />
         </View>
-      )}
+      </Modal>
     </View>
   );
 }

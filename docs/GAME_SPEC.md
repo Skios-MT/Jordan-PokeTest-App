@@ -307,6 +307,21 @@ move that failed its accuracy roll (see 1.3a) — not just the bare "X used Y" a
 or catching a wild creature also rolls a 10% chance to drop a **Kinnie** (never sold, drop-only — see
 4.3), noted in the Result Screen and the battle log.
 
+**Battle Result pop-up**: the win/lose/caught/fled screen (previously a plain absolutely-positioned
+overlay) is now a real `Modal` (`animationType="fade"`, `src/screens/BattleScreen.tsx`) so it visibly
+pops in over the battle rather than appearing instantly, matching the "show a result pop-up" brief.
+
+**Level-up stat comparison**: whenever a party member gains a level — from post-battle XP or from a
+Kinnie, in battle or from Creature Detail outside of one — a `LevelUpModal`
+(`src/screens/components/LevelUpModal.tsx`) shows the creature's old stats vs. its new stats side by
+side (HP/Attack/Defense/Sp. Attack/Sp. Defense/Speed, each with its `+N` delta called out), and the
+whole screen is tappable to dismiss and continue, mirroring the mainline games' level-up screen. This
+is a shared component used from three places: `BattleScreen`'s post-battle XP level-up (shown before
+the Battle Result pop-up, so a level-up from the battle's own reward is never hidden underneath it),
+`BattleScreen`'s in-battle Kinnie use (the level bump, item consumption, and the turn's resolution are
+all deferred until the player dismisses the stat comparison — the enemy's move doesn't play out
+underneath it), and `CreatureDetailScreen`'s Kinnie use outside of battle.
+
 **Levels/XP**: starters begin at level 5 (`STARTER_STARTING_LEVEL`), defeating a wild creature grants
 XP and gold (`src/game/progression.ts`), and stats scale with level via `effectiveStats()` rather
 than staying flat. Catching adds a real party member (`src/game/party.ts`), which Party, Codex

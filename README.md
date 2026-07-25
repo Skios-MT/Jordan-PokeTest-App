@@ -66,7 +66,11 @@ Shop all reachable from Map/Home, matching spec 4.1.
   are drawn from a weighted encounter table whose level range increases per
   zone. Winning or catching grants gold/XP and a 10% chance to drop a rare
   **Kinnie** item; each combatant shows a generated, type-colored avatar with
-  lunge/hit/faint/heal/crux-glow animations and a flash tint on big hits.
+  lunge/hit/faint/heal/crux-glow animations and a flash tint on big hits. The
+  win/lose/caught/fled screen is a real fade-in pop-up (`Modal`), and any
+  level-up — from battle XP or a Kinnie — pauses on a tap-to-continue stat
+  comparison screen (old stats vs. new, with the delta) before the pop-up or
+  turn continues.
 - **Party**: lists every caught creature (level, HP, fainted status); tap
   one for its Creature Detail (stats, HP, XP-to-next-level, known moves, and
   its own Use Item button for healing/leveling up outside of battle).
