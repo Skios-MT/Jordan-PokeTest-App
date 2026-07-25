@@ -98,6 +98,27 @@ describe("gameStore", () => {
     });
   });
 
+  describe("setMainPartyMember", () => {
+    it("moves the given member to the front, preserving the relative order of the rest", () => {
+      useGameStore.setState({ party: [makeMember("a"), makeMember("b"), makeMember("c")] });
+      useGameStore.getState().setMainPartyMember("c");
+      expect(useGameStore.getState().party.map((m) => m.uid)).toEqual(["c", "a", "b"]);
+    });
+
+    it("is a no-op when the member is already main", () => {
+      const party = [makeMember("a"), makeMember("b")];
+      useGameStore.setState({ party });
+      useGameStore.getState().setMainPartyMember("a");
+      expect(useGameStore.getState().party).toBe(party);
+    });
+
+    it("is a no-op for an unknown uid", () => {
+      useGameStore.setState({ party: [makeMember("a"), makeMember("b")] });
+      useGameStore.getState().setMainPartyMember("does-not-exist");
+      expect(useGameStore.getState().party.map((m) => m.uid)).toEqual(["a", "b"]);
+    });
+  });
+
   describe("healFaintedPartyMembers", () => {
     it("fully revives every KO'd member to max HP and leaves conscious ones untouched", () => {
       const fainted = { ...makeMember("a"), currentHp: 0 };

@@ -210,7 +210,7 @@ Splash → Title ("Chivalry & Antiquity") →
   (New Game: Name Entry → Region Select → Starter Quiz → Starter Reveal) / (Continue: Load Save)
    └─▶ MAP (Exploring — the default/root screen)
          ├─▶ "Menu" button / M key → HOME (party HUD + quick links)
-         │        ├─▶ Party Management (release, Use Item, move-relearn)
+         │        ├─▶ Party Management (release, Use Item, move-relearn, Set as Main)
          │        ├─▶ Creature Index (Codex — grid view, filter by type/zone/caught-status)
          │        ├─▶ Bag/Inventory (categorized tabs: Balls, Medicine, Key Items, Battle Items)
          │        └─▶ Shop (buy Balls/Medicine with gold)
@@ -278,6 +278,14 @@ party member to max HP via `gameStore.healFaintedPartyMembers()` — deliberatel
 full-party top-up like the mainline games' Pokemon Centers; a conscious-but-damaged party member is
 left as-is. This is the mechanism for recovering from a full-party blackout without needing to catch a
 new lead or grind currency for medicine.
+
+**The active battler is always the first conscious member of the `party` array**
+(`party.find((m) => m.currentHp > 0)` in `BattleScreen.tsx`), so battle order follows party order, not
+catch order intrinsically — the Party screen exposes a **Set as Main** button on every non-fainted
+member other than the current lead, which calls `gameStore.setMainPartyMember(uid)` to move that
+member to the front of the array (preserving the relative order of everyone else); the current lead
+shows a "Main" tag instead of the button, and fainted members don't get the option at all, since
+setting a KO'd creature as lead wouldn't change who actually opens the next battle.
 
 Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
 action (`src/engine/catching.ts` wired to the Bag's ball items), randomized wild encounters, **party
@@ -379,11 +387,15 @@ zone, not the species pool, since there's no real per-zone spawn table yet.
 
 Reasoning: the battle system here is fundamentally *data-driven turn logic*, not real-time physics/3D — a JS/TS stack ships to both app stores from one codebase with less native-build overhead than Unity, and is easier to iterate on with AI-assisted code generation (smaller, clearly-typed files). If future scope wants heavier 3D overworld exploration, Unity becomes the stronger call — flag this as a re-evaluation point at the end of the vertical-slice milestone, not before.
 
-**Core packages:** `expo`, `zustand` (state), `react-navigation`, `expo-sqlite` (persistence), `@shopify/react-native-skia` (2D rendering/animation), `zod` (runtime schema validation for the JSON creature/move data).
+**Core packages:** `expo`, `zustand` (state, with its `persist` middleware for save data), `react-navigation`, `@react-native-async-storage/async-storage` (cross-platform save storage — AsyncStorage on iOS/Android, `localStorage` on web), `@shopify/react-native-skia` (2D rendering/animation), `zod` (runtime schema validation for the JSON creature/move data).
 
-### 5.2 Data Persistence Schema (SQLite)
+### 5.2 Save/Load Persistence
 
-See `src/db/schema.sql` (reference copy) and `src/db/schema.ts` (the runtime string applied via `src/db/index.ts`'s `getDb()`, since Metro/tsc don't resolve raw `.sql` imports) — implements `player_state`, `owned_creatures`, `inventory`, `quest_flags`, and `codex_entries` tables exactly as specified, including the IV/EV/moveset JSON-blob columns and the party-slot vs. box distinction.
+The whole game store (`src/state/gameStore.ts`) is wrapped in zustand's `persist` middleware, backed by `@react-native-async-storage/async-storage` via `createJSONStorage`. AsyncStorage transparently resolves to the real native module on iOS/Android and to `window.localStorage` on web (including the GitHub Pages build), so the exact same code auto-saves on every state change across all platforms — no manual "Save" step is needed, and none is exposed in the UI, since every action that mutates the store (catching, leveling, moving zones, spending gold, etc.) flushes to disk immediately.
+
+`partialize` persists only the actual save fields (`playerName`, `selectedLine`, `currentZoneId`, `battlesWon`, `party`, `seenSpeciesIds`, `caughtSpeciesIds`, `inventory`, `currency`) under the `melita-save` key; `hasHydrated` — a store field set true once the async storage read completes — is deliberately excluded and lets `TitleScreen` distinguish "still loading" from "no save exists" so it doesn't flash a wrong "Continue" state. `TitleScreen`'s **Continue** button is enabled once hydration finishes and `party.length > 0`, and resets navigation straight to `Map` at the saved `currentZoneId`; **New Game** calls `resetGame()` before proceeding whenever a save already exists, so starting over never leaves stale progress mixed into the new save.
+
+`src/db/` (SQLite schema/tables mirroring an earlier, never-wired-up design) is unused dead code superseded by the above and kept only as historical reference.
 
 ### 5.3 Engine Implementation
 

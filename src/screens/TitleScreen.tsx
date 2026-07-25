@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
+import { useGameStore } from "../state/gameStore";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { colors } from "./theme";
@@ -8,6 +9,20 @@ import { colors } from "./theme";
 type Props = NativeStackScreenProps<RootStackParamList, "Title">;
 
 export function TitleScreen({ navigation }: Props) {
+  const hasHydrated = useGameStore((s) => s.hasHydrated);
+  const hasSave = useGameStore((s) => s.party.length > 0);
+  const currentZoneId = useGameStore((s) => s.currentZoneId);
+  const resetGame = useGameStore((s) => s.resetGame);
+
+  function handleNewGame() {
+    if (hasSave) resetGame();
+    navigation.navigate("NameEntry");
+  }
+
+  function handleContinue() {
+    navigation.reset({ index: 0, routes: [{ name: "Map", params: { zoneId: currentZoneId } }] });
+  }
+
   return (
     <ScreenBackground style={styles.container}>
       <View style={styles.crest}>
@@ -19,9 +34,17 @@ export function TitleScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.actions}>
-        <PrimaryButton label="New Game" onPress={() => navigation.navigate("NameEntry")} />
-        <PrimaryButton label="Continue" onPress={() => {}} disabled variant="secondary" />
-        <Text style={styles.hint}>No save file yet — Continue unlocks once persistence is wired up.</Text>
+        <PrimaryButton testID="new-game" label="New Game" onPress={handleNewGame} />
+        <PrimaryButton
+          testID="continue-game"
+          label="Continue"
+          onPress={handleContinue}
+          disabled={!hasHydrated || !hasSave}
+          variant="secondary"
+        />
+        {hasHydrated && !hasSave && (
+          <Text style={styles.hint}>No save file yet — start a New Game to create one.</Text>
+        )}
       </View>
     </ScreenBackground>
   );

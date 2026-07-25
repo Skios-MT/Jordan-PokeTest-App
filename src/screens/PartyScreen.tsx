@@ -17,6 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Party">;
 export function PartyScreen({ navigation }: Props) {
   const party = useGameStore((s) => s.party);
   const releaseCreature = useGameStore((s) => s.releaseCreature);
+  const setMainPartyMember = useGameStore((s) => s.setMainPartyMember);
   const [confirmUid, setConfirmUid] = useState<string | null>(null);
 
   useKeyboardShortcuts({ m: () => navigation.popToTop() });
@@ -47,6 +48,7 @@ export function PartyScreen({ navigation }: Props) {
                       <Text style={styles.name}>
                         {member.displayName} <Text style={styles.level}>Lv. {member.level}</Text>
                       </Text>
+                      {index === 0 && <Text style={styles.mainTag}>Main</Text>}
                       {fainted && <Text style={styles.faintedTag}>Fainted</Text>}
                     </View>
                     <View style={styles.badgeRow}>
@@ -59,39 +61,51 @@ export function PartyScreen({ navigation }: Props) {
                 </View>
               </Pressable>
 
-              {party.length > 1 &&
-                (confirming ? (
-                  <View style={styles.releaseConfirmRow}>
-                    <Text style={styles.releaseConfirmText}>Release {member.displayName} for good?</Text>
-                    <View style={styles.releaseConfirmButtons}>
-                      <Pressable
-                        testID={`confirm-release-${member.uid}`}
-                        onPress={() => {
-                          releaseCreature(member.uid);
-                          setConfirmUid(null);
-                        }}
-                        style={styles.releaseConfirmBtn}
-                      >
-                        <Text style={styles.releaseConfirmBtnText}>Yes, release</Text>
-                      </Pressable>
-                      <Pressable
-                        testID={`cancel-release-${member.uid}`}
-                        onPress={() => setConfirmUid(null)}
-                        style={styles.releaseCancelBtn}
-                      >
-                        <Text style={styles.releaseCancelBtnText}>Cancel</Text>
-                      </Pressable>
-                    </View>
+              {confirming ? (
+                <View style={styles.releaseConfirmRow}>
+                  <Text style={styles.releaseConfirmText}>Release {member.displayName} for good?</Text>
+                  <View style={styles.releaseConfirmButtons}>
+                    <Pressable
+                      testID={`confirm-release-${member.uid}`}
+                      onPress={() => {
+                        releaseCreature(member.uid);
+                        setConfirmUid(null);
+                      }}
+                      style={styles.releaseConfirmBtn}
+                    >
+                      <Text style={styles.releaseConfirmBtnText}>Yes, release</Text>
+                    </Pressable>
+                    <Pressable
+                      testID={`cancel-release-${member.uid}`}
+                      onPress={() => setConfirmUid(null)}
+                      style={styles.releaseCancelBtn}
+                    >
+                      <Text style={styles.releaseCancelBtnText}>Cancel</Text>
+                    </Pressable>
                   </View>
-                ) : (
-                  <Pressable
-                    testID={`release-${member.uid}`}
-                    onPress={() => setConfirmUid(member.uid)}
-                    style={styles.releaseButton}
-                  >
-                    <Text style={styles.releaseButtonText}>Release</Text>
-                  </Pressable>
-                ))}
+                </View>
+              ) : (
+                <View style={styles.actionRow}>
+                  {index !== 0 && !fainted && (
+                    <Pressable
+                      testID={`set-main-${member.uid}`}
+                      onPress={() => setMainPartyMember(member.uid)}
+                      style={styles.setMainButton}
+                    >
+                      <Text style={styles.setMainButtonText}>Set as Main</Text>
+                    </Pressable>
+                  )}
+                  {party.length > 1 && (
+                    <Pressable
+                      testID={`release-${member.uid}`}
+                      onPress={() => setConfirmUid(member.uid)}
+                      style={styles.releaseButton}
+                    >
+                      <Text style={styles.releaseButtonText}>Release</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
             </View>
           );
         })}
@@ -144,6 +158,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginLeft: "auto",
   },
+  mainTag: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: "700",
+    marginLeft: "auto",
+  },
   cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -180,9 +200,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 40,
   },
-  releaseButton: {
-    alignSelf: "flex-end",
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
     marginTop: 4,
+  },
+  setMainButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  setMainButtonText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  releaseButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,

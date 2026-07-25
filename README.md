@@ -75,6 +75,9 @@ Shop all reachable from Map/Home, matching spec 4.1.
   one for its Creature Detail (stats, HP, XP-to-next-level, known moves, and
   its own Use Item button for healing/leveling up outside of battle).
   Release any creature (except your last one) with an inline confirm step.
+  The first party slot is always who leads your next battle; any other
+  non-fainted member shows a **Set as Main** button that moves it to the
+  front of the party (the current lead shows a "Main" tag instead).
 - **Codex**: a grid of all known species; unseen ones show as "???" until
   encountered in battle, caught ones are marked. Filterable by type.
 - **Bag**: Balls / Medicine / Key Items / Battle Items tabs. The starting Bag
@@ -94,6 +97,14 @@ rather than staying flat. The creature roster includes one original wild
 species (Fossary, Bug/Grass) plus the three regional variants, all fully
 battle-ready with real stats and movesets — shared across all three zones,
 since there's no real per-zone species pool yet (only the level range shifts).
+
+**Progress saves automatically** (`src/state/gameStore.ts`, via zustand's
+`persist` middleware backed by AsyncStorage, which uses `localStorage` on
+web and the native module on iOS/Android) — every action that changes game
+state is written to disk immediately, so there's no separate save button.
+The Title screen's **Continue** unlocks once a save exists and drops you
+back onto the Map exactly where you left off; **New Game** always starts
+clean, wiping any existing save first.
 
 Not built: an XP-bar animation or catch-prompt flourish on the result screen,
 PP tracking or move tooltips, tap-to-pathfind movement (the map uses a D-pad
