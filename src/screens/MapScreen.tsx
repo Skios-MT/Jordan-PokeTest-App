@@ -13,6 +13,10 @@ import { colors } from "./theme";
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
 const TILE_SIZE = 44;
+/** How many tiles are visible at once — bigger zones now scroll a camera around the player
+ * rather than rendering the whole map (which stopped fitting on a phone screen). Odd, so the
+ * avatar can sit dead-center. */
+const VIEWPORT_TILES = 7;
 /** Base 0.15, bumped 30% per request. */
 const ENCOUNTER_CHANCE = 0.195;
 /** Screen-flash transition before cutting to Battle — a burst of quick flashes,
@@ -40,10 +44,32 @@ const TILE_COLORS: Record<TileType, string> = {
   heal: "#2e5c8a",
 };
 
+/**
+ * Camera offset for one axis: follows the player's animated pixel position, centering them in
+ * the viewport, but clamps at the map's edges so the camera never shows past the map bounds.
+ * Returns a plain 0 (no scrolling needed) when the whole axis already fits inside the viewport.
+ */
+function cameraOffset(playerAnim: Animated.Value, mapPx: number, viewportPx: number) {
+  if (mapPx <= viewportPx) return 0;
+  const half = (viewportPx - TILE_SIZE) / 2;
+  const rightBound = mapPx - viewportPx;
+  const maxPlayer = mapPx - TILE_SIZE;
+  return playerAnim.interpolate({
+    inputRange: [0, half, half + rightBound, maxPlayer],
+    outputRange: [0, 0, rightBound, rightBound],
+    extrapolate: "clamp",
+  });
+}
+
 export function MapScreen({ navigation, route }: Props) {
   const map = getMap(route.params.zoneId);
   const setCurrentZone = useGameStore((s) => s.setCurrentZone);
   const healFaintedPartyMembers = useGameStore((s) => s.healFaintedPartyMembers);
+
+  const mapPixelWidth = map.rows[0].length * TILE_SIZE;
+  const mapPixelHeight = map.rows.length * TILE_SIZE;
+  const viewportWidth = Math.min(VIEWPORT_TILES * TILE_SIZE, mapPixelWidth);
+  const viewportHeight = Math.min(VIEWPORT_TILES * TILE_SIZE, mapPixelHeight);
 
   const [position, setPosition] = useState(map.playerStart);
   const [facing, setFacing] = useState<Direction>("down");
@@ -57,6 +83,11 @@ export function MapScreen({ navigation, route }: Props) {
     })
   ).current;
   const encounterFlash = useRef(new Animated.Value(0)).current;
+
+  const cameraX = cameraOffset(anim.x, mapPixelWidth, viewportWidth);
+  const cameraY = cameraOffset(anim.y, mapPixelHeight, viewportHeight);
+  const cameraTranslateX = typeof cameraX === "number" ? cameraX : Animated.multiply(cameraX, -1);
+  const cameraTranslateY = typeof cameraY === "number" ? cameraY : Animated.multiply(cameraY, -1);
 
   function move(direction: Direction) {
     if (busy) return;
@@ -134,13 +165,22 @@ export function MapScreen({ navigation, route }: Props) {
         {map.exitTo ? " The lit path leads onward." : " This is as far as the path goes for now."}
       </Text>
 
-      <View style={styles.gridWrap}>
-        <View style={[styles.grid, { width: map.rows[0].length * TILE_SIZE, height: map.rows.length * TILE_SIZE }]}>
+      <View style={[styles.gridWrap, { width: viewportWidth, height: viewportHeight }]}>
+        <Animated.View
+          style={[
+            styles.grid,
+            {
+              width: mapPixelWidth,
+              height: mapPixelHeight,
+              transform: [{ translateX: cameraTranslateX }, { translateY: cameraTranslateY }],
+            },
+          ]}
+        >
           {map.rows.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
               {row.map((tile, colIndex) => (
                 <View key={colIndex} style={[styles.tile, { backgroundColor: TILE_COLORS[tile] }]}>
-                  {tile === "grass" && <Text style={styles.grassGlyph}>᛭</Text>}
+                  {tile === "grass" && <Text style={styles.grassGlyph}>🌿</Text>}
                   {tile === "heal" && <Text style={styles.healGlyph}>✚</Text>}
                 </View>
               ))}
@@ -149,12 +189,12 @@ export function MapScreen({ navigation, route }: Props) {
           <Animated.View testID="player-avatar" style={[styles.avatar, { transform: anim.getTranslateTransform() }]}>
             <Text style={styles.avatarGlyph}>{DIRECTION_DELTA[facing].glyph}</Text>
           </Animated.View>
-          <Animated.View
-            testID="encounter-flash"
-            pointerEvents="none"
-            style={[styles.encounterFlash, { opacity: encounterFlash }]}
-          />
-        </View>
+        </Animated.View>
+        <Animated.View
+          testID="encounter-flash"
+          pointerEvents="none"
+          style={[styles.encounterFlash, { opacity: encounterFlash }]}
+        />
       </View>
 
       <Text style={styles.message}>{message ?? " "}</Text>
@@ -204,13 +244,14 @@ const styles = StyleSheet.create({
   },
   gridWrap: {
     marginTop: 8,
-  },
-  grid: {
     position: "relative",
     borderRadius: 8,
     overflow: "hidden",
     borderWidth: 2,
     borderColor: colors.border,
+  },
+  grid: {
+    position: "relative",
   },
   row: {
     flexDirection: "row",
@@ -224,8 +265,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   grassGlyph: {
-    color: "rgba(90, 200, 140, 0.55)",
-    fontSize: 18,
+    fontSize: 16,
+    opacity: 0.75,
   },
   healGlyph: {
     color: "#ffffff",

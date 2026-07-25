@@ -15,5 +15,6 @@ export type RootStackParamList = {
   Codex: undefined;
   Bag: undefined;
   Shop: undefined;
+  Help: undefined;
   CreatureDetail: CreatureDetailParams;
 };

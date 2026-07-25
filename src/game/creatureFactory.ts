@@ -99,4 +99,10 @@ export function randomWildLevel(baseLevel: number, spread = 3): number {
   return Math.max(1, baseLevel + offset);
 }
 
+/** Like randomWildLevel, but only ever rolls upward from a hard floor — used for the rare
+ * legendary encounter, which should never dip below its zone's minimum level. */
+export function randomLevelAtLeast(minLevel: number, spread = 5): number {
+  return minLevel + Math.floor(Math.random() * (spread + 1));
+}
+
 export const ALL_STARTER_LINES = starters.map((s) => s.line);

@@ -1,17 +1,33 @@
 import regionalVariantsData from "../data/regionalVariants.json";
 import wildCreaturesData from "../data/wildCreatures.json";
-import { RegionalVariantsFileSchema, WildCreaturesFileSchema } from "../data/schemas";
+import legendariesData from "../data/legendaries.json";
+import { RegionalVariantsFileSchema, WildCreaturesFileSchema, LegendariesFileSchema } from "../data/schemas";
 import {
   buildParticipant,
   buildStarterParticipant,
   otherStarterLines,
   randomWildLevel,
+  randomLevelAtLeast,
   type BattleParticipant,
   type StarterLineName,
 } from "./creatureFactory";
 
 const regionalVariants = RegionalVariantsFileSchema.parse(regionalVariantsData).regionalVariants;
 const wildCreatures = WildCreaturesFileSchema.parse(wildCreaturesData).wildCreatures;
+const legendaries = LegendariesFileSchema.parse(legendariesData).legendaries;
+
+/** legendaries.json only carries a flavor `signatureMove` name, not a real moveset — these are
+ * the closest-fit moves from the actual move pool (src/data/moves.json), same placeholder
+ * approach as the regional variants' movesets. */
+const LEGENDARY_MOVE_IDS: Record<string, string[]> = {
+  aegilord: ["metal_claw", "tackle"],
+  megalithos: ["rock_throw", "tackle"],
+  siroccus: ["rock_throw", "tackle"],
+};
+
+/** Vanishingly rare relative to the rest of the table (a single wild creature alone outweighs
+ * all three legendaries combined) — this is the "you might see one, once in a long while" tier. */
+const LEGENDARY_ENCOUNTER_WEIGHT = 0.3;
 
 export interface EncounterOption {
   weight: number;
@@ -22,6 +38,8 @@ export interface ZoneEncounterConfig {
   /** Center of the wild-level range for this zone/tier. */
   baseLevel: number;
   levelSpread?: number;
+  /** Hard floor for the ultra-rare legendary encounter — see zones.ts. */
+  legendaryMinLevel: number;
 }
 
 /**
@@ -58,6 +76,22 @@ export function buildZoneEncounterTable(
       weight: 1,
       build: (id) =>
         buildParticipant(id, rv.id, rv.name, rv.types, rv.baseStats, randomWildLevel(baseLevel, levelSpread), rv.moveIds),
+    });
+  }
+
+  for (const legend of legendaries) {
+    table.push({
+      weight: LEGENDARY_ENCOUNTER_WEIGHT,
+      build: (id) =>
+        buildParticipant(
+          id,
+          legend.id,
+          legend.name,
+          legend.types,
+          legend.baseStats,
+          randomLevelAtLeast(config.legendaryMinLevel),
+          LEGENDARY_MOVE_IDS[legend.id]
+        ),
     });
   }
 

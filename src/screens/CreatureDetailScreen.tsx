@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
@@ -53,10 +53,13 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   const releaseCreature = useGameStore((s) => s.releaseCreature);
   const inventory = useGameStore((s) => s.inventory);
   const useItemOnPartyMember = useGameStore((s) => s.useItemOnPartyMember);
+  const renamePartyMember = useGameStore((s) => s.renamePartyMember);
   const [confirmingRelease, setConfirmingRelease] = useState(false);
   const [showItems, setShowItems] = useState(false);
   const [itemFeedback, setItemFeedback] = useState<string | null>(null);
   const [levelUpReveal, setLevelUpReveal] = useState<LevelUpRevealData | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
 
   useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
@@ -91,6 +94,16 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
 
   const applicableItems = usableItems().filter((item) => (inventory[item.id] ?? 0) > 0);
 
+  function handleStartRename() {
+    setNameDraft(partyMember?.displayName ?? "");
+    setRenaming(true);
+  }
+
+  function handleSaveRename() {
+    if (partyMember) renamePartyMember(partyMember.uid, nameDraft);
+    setRenaming(false);
+  }
+
   function handleUseItem(itemId: string, itemName: string) {
     if (!partyMember) return;
     const oldStats = partyMemberStats(partyMember);
@@ -120,10 +133,38 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
         <View style={styles.headerTopRow}>
           <CreatureAvatar speciesId={speciesId} types={types} size={72} />
           <View style={styles.headerInfo}>
-            <View style={styles.headerRow}>
-              <Text style={styles.name}>{name}</Text>
-              {level !== null && <Text style={styles.level}>Lv. {level}</Text>}
-            </View>
+            {renaming ? (
+              <View style={styles.renameRow}>
+                <TextInput
+                  testID="rename-input"
+                  value={nameDraft}
+                  onChangeText={setNameDraft}
+                  maxLength={16}
+                  autoFocus
+                  placeholder={name}
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.renameInput}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSaveRename}
+                />
+                <Pressable testID="save-rename" onPress={handleSaveRename} style={styles.renameSaveBtn}>
+                  <Text style={styles.renameSaveBtnText}>Save</Text>
+                </Pressable>
+                <Pressable testID="cancel-rename" onPress={() => setRenaming(false)} style={styles.renameCancelBtn}>
+                  <Text style={styles.renameCancelBtnText}>Cancel</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.headerRow}>
+                <Text style={styles.name}>{name}</Text>
+                {level !== null && <Text style={styles.level}>Lv. {level}</Text>}
+                {partyMember && (
+                  <Pressable testID="rename-button" onPress={handleStartRename} style={styles.renameButton}>
+                    <Text style={styles.renameButtonText}>Rename</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
             <View style={styles.badgeRow}>
               {types.map((t) => (
                 <TypeBadge key={t} type={t} />
@@ -285,8 +326,9 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
     alignItems: "baseline",
+    gap: 8,
   },
   name: {
     color: colors.text,
@@ -296,6 +338,59 @@ const styles = StyleSheet.create({
   level: {
     color: colors.textMuted,
     fontSize: 16,
+  },
+  renameButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  renameButtonText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  renameRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+  renameInput: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    color: colors.text,
+    fontSize: 16,
+  },
+  renameSaveBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  renameSaveBtnText: {
+    color: "#0d1b2a",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  renameCancelBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  renameCancelBtnText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
   },
   badgeRow: {
     flexDirection: "row",

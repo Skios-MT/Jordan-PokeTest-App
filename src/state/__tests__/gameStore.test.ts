@@ -119,6 +119,33 @@ describe("gameStore", () => {
     });
   });
 
+  describe("renamePartyMember", () => {
+    it("trims whitespace and updates the given member's displayName", () => {
+      useGameStore.setState({ party: [makeMember("a")] });
+      useGameStore.getState().renamePartyMember("a", "  Sparky  ");
+      expect(useGameStore.getState().party[0].displayName).toBe("Sparky");
+    });
+
+    it("caps the name at 16 characters", () => {
+      useGameStore.setState({ party: [makeMember("a")] });
+      useGameStore.getState().renamePartyMember("a", "ThisNameIsWayTooLongForTheGame");
+      expect(useGameStore.getState().party[0].displayName).toBe("ThisNameIsWayToo");
+    });
+
+    it("ignores blank input, leaving the existing name untouched", () => {
+      useGameStore.setState({ party: [makeMember("a")] });
+      useGameStore.getState().renamePartyMember("a", "   ");
+      expect(useGameStore.getState().party[0].displayName).toBe("Test a");
+    });
+
+    it("is a no-op for an unknown uid", () => {
+      const party = [makeMember("a")];
+      useGameStore.setState({ party });
+      useGameStore.getState().renamePartyMember("does-not-exist", "Sparky");
+      expect(useGameStore.getState().party[0].displayName).toBe("Test a");
+    });
+  });
+
   describe("healFaintedPartyMembers", () => {
     it("fully revives every KO'd member to max HP and leaves conscious ones untouched", () => {
       const fainted = { ...makeMember("a"), currentHp: 0 };

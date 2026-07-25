@@ -88,6 +88,14 @@ export function HomeScreen({ navigation }: Props) {
             onPress={() => navigation.navigate("Shop")}
           />
         </HoverTip>
+        <HoverTip text="Explains the goal, battling, catching, and what Crux Aura is.">
+          <PrimaryButton
+            testID="nav-help"
+            label="Help"
+            variant="secondary"
+            onPress={() => navigation.navigate("Help")}
+          />
+        </HoverTip>
       </View>
     </ScreenBackground>
   );

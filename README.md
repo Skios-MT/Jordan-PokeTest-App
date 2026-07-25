@@ -25,7 +25,8 @@ src/game/              Bridges data -> engine: move/item lookup, creature
 src/state/             zustand game store (party, inventory, seen/caught, zone)
 src/navigation/         React Navigation stack + route param types
 src/screens/            Title, Region Select, Starter Select, Home, Map,
-                        Battle View, Party, Codex, Bag, Shop, Creature Detail
+                        Battle View, Party, Codex, Bag, Shop, Help,
+                        Creature Detail
 src/db/                SQLite persistence schema
 App.tsx                Expo entry point, renders the navigator
 ```
@@ -44,16 +45,21 @@ Shop all reachable from Map/Home, matching spec 4.1.
   Grass/Fire/Water starter automatically, shown on a reveal/confirm screen —
   no more direct tap-to-choose.
 - **Map**: three connected zones (Melita Woods -> Luzzu Harbour -> Azure
-  Caverns), each an irregularly-shaped tile grid of its own size (a diamond
-  clearing, a harbour with a pier, a zigzag cave — not a uniform 7x7 square),
-  with a 4-directional D-pad (or arrow keys), a player avatar, and one exit
-  tile leading to the next (stronger) zone. Walking onto **Dark Grass**
-  (visually distinct from Path — near-black green vs. warm tan, plus a
-  texture glyph) has a 19.5% chance to trigger a wild battle (Path and Exit
-  tiles never do), which plays a screen-flash transition before cutting to
-  Battle View. Each zone also has one **Healing Center** (✚) tile that fully
-  revives any KO'd party members on the spot.
-- **Battle View**: pick a move, Invoke Crux, throw a ball to catch the wild
+  Caverns), each a large, irregularly-shaped tile grid of its own size (a
+  diamond clearing, a harbour with a pier, a zigzag cave — not a uniform
+  square). A camera viewport follows the player and scrolls/clamps at the
+  map's edges, since the zones are now bigger than one screen. A
+  4-directional D-pad (or arrow keys) moves the avatar toward one exit tile
+  leading to the next (stronger) zone. Walking onto **Dark Grass** (visually
+  distinct from Path — near-black green vs. warm tan, plus a small 🌿 icon)
+  has a 19.5% chance to trigger a wild battle (Path and Exit tiles never
+  do), which plays a screen-flash transition before cutting to Battle View.
+  Each zone also has one **Healing Center** (✚) tile that fully revives any
+  KO'd party members on the spot.
+- **Battle View**: a Pokemon-Yellow-style layout — the wild creature stands
+  upper-right with its info box upper-left, your creature stands lower-left
+  (larger, "closer to camera") with its info box lower-right, on a sky/ground
+  battle stage. Pick a move, Invoke Crux, throw a ball to catch the wild
   creature, switch party members (voluntarily via the Party sheet, or for
   free when your active creature faints and a reserve remains), use an item
   to heal or level up, or run away — all driven by the real engine, not mock
@@ -62,31 +68,43 @@ Shop all reachable from Map/Home, matching spec 4.1.
   KO correctly shows only one attack, not two), moves can miss based on
   accuracy (higher-power moves have lower accuracy), and the log shows the
   real numbers: damage dealt, crits, and type-effectiveness commentary
-  ("It's super effective!" / "It's not very effective..."). Wild encounters
-  are drawn from a weighted encounter table whose level range increases per
-  zone. Winning or catching grants gold/XP and a 10% chance to drop a rare
-  **Kinnie** item; each combatant shows a generated, type-colored avatar with
-  lunge/hit/faint/heal/crux-glow animations and a flash tint on big hits. The
-  win/lose/caught/fled screen is a real fade-in pop-up (`Modal`), and any
-  level-up — from battle XP or a Kinnie — pauses on a tap-to-continue stat
-  comparison screen (old stats vs. new, with the delta) before the pop-up or
-  turn continues.
+  ("It's super effective!" / "It's not very effective..."). Every move fires
+  a type-colored projectile (reusing each type's color/icon — red 🔥 for
+  Fire, blue 💧 for Water, and so on) that visibly travels from attacker to
+  defender before the hit lands; throwing a ball arcs it the same path with
+  a spin. Wild encounters are drawn from a weighted encounter table whose
+  level range increases per zone, plus a vanishingly rare chance (each zone's
+  three story legendaries, `src/data/legendaries.json`) of a legendary
+  encounter at a hard-floor level (25 in Melita Woods, rising in later
+  zones) far above the zone's normal range. Winning or catching grants
+  gold/XP and a 10% chance to drop a rare **Kinnie** item; each combatant
+  shows a generated, type-colored avatar with lunge/hit/faint/heal/crux-glow
+  animations and a flash tint on big hits. The win/lose/caught/fled screen
+  is a real fade-in pop-up (`Modal`), and any level-up — from battle XP or a
+  Kinnie — pauses on a tap-to-continue stat comparison screen (old stats vs.
+  new, with the delta) before the pop-up or turn continues.
 - **Party**: lists every caught creature (level, HP, fainted status); tap
-  one for its Creature Detail (stats, HP, XP-to-next-level, known moves, and
-  its own Use Item button for healing/leveling up outside of battle).
-  Release any creature (except your last one) with an inline confirm step.
-  The first party slot is always who leads your next battle; any other
-  non-fainted member shows a **Set as Main** button that moves it to the
-  front of the party (the current lead shows a "Main" tag instead).
+  one for its Creature Detail (stats, HP, XP-to-next-level, known moves, a
+  **Rename** control for a custom nickname, and its own Use Item button for
+  healing/leveling up outside of battle). Release any creature (except your
+  last one) with an inline confirm step. The first party slot is always who
+  leads your next battle; any other non-fainted member shows a **Set as
+  Main** button that moves it to the front of the party (the current lead
+  shows a "Main" tag instead).
 - **Codex**: a grid of all known species; unseen ones show as "???" until
   encountered in battle, caught ones are marked. Filterable by type.
-- **Bag**: Balls / Medicine / Key Items / Battle Items tabs. The starting Bag
-  is small on purpose — 3 Pastizz and 3 Greca Traps only; everything else
-  (Melitan Ball, Festa Trap, Qassata, Ftira biz-Zejt) starts at 0 and must be
-  bought in the Shop. Pastizz/Qassata/Ftira biz-Zejt restore a flat 15/40/80
-  HP; Kinnie instantly grants +1 level and is never sold — drop-only.
+- **Bag**: Balls / Medicine / Key Items / Battle Items tabs, each showing
+  only the items you actually own (zero-quantity items are hidden rather
+  than listed as "x0"). The starting Bag is small on purpose — 3 Pastizz and
+  3 Greca Traps only; everything else (Melitan Ball, Festa Trap, Qassata,
+  Ftira biz-Zejt) starts at 0 and must be bought in the Shop. Pastizz/Qassata/
+  Ftira biz-Zejt restore a flat 15/40/80 HP; Kinnie instantly grants +1 level
+  and is never sold — drop-only.
 - **Shop**: buy Balls and Medicine with gold earned from catching or
   defeating wild creatures.
+- **Help**: reachable from the Home menu — explains the goal, battling,
+  Crux Aura (trigger, duration, per-alignment effects, and the Aura-Spent
+  decay), catching, Healing Centers, party order, items, and controls.
 
 **Keyboard controls** (web only): arrow keys move on the Map, `B` opens the
 Bag, `P` opens Party, `M` opens/returns-to the Home menu, and `R` flees a

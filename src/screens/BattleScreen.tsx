@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore, type ExperienceGainResult } from "../state/gameStore";
@@ -16,12 +16,10 @@ import { isCruxOnCooldown, CRUX_AURA_STATUS_ID } from "../engine/cruxAura";
 import { getActiveEffect } from "../engine/statusEffects";
 import { getTypeMultiplier } from "../engine/typeChart";
 import type { BattleAction, BattleContext, Creature } from "../engine/types";
-import type { TypeName } from "../data/schemas";
-import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
 import { PrimaryButton } from "./components/PrimaryButton";
-import { CreatureAvatar } from "./components/CreatureAvatar";
 import { useCombatantAnimation } from "./components/useCombatantAnimation";
+import { BattleStage, PROJECTILE_TRAVEL_MS, BALL_TRAVEL_MS, type BattleStageHandle } from "./components/BattleStage";
 import { HoverTip } from "./components/HoverTip";
 import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { LevelUpModal, type LevelUpRevealData } from "./components/LevelUpModal";
@@ -141,6 +139,7 @@ export function BattleScreen({ navigation }: Props) {
 
   const playerAnim = useCombatantAnimation();
   const enemyAnim = useCombatantAnimation();
+  const stageRef = useRef<BattleStageHandle>(null);
 
   useEffect(() => {
     markSeen(enemy.creature.speciesId);
@@ -271,18 +270,27 @@ export function BattleScreen({ navigation }: Props) {
       const announceLines = isPlayer ? playerLines : [`Wild ${enemy.displayName} used ${getMove(enemyMoveId).name}.`];
       pushLog([...announceLines, ...resultLinesFor(outcome, playerActiveId)]);
 
+      function applyReaction() {
+        if (outcome.hit && outcome.target) {
+          if (outcome.damage > 0) {
+            reactingAnim.hit(outcome.damage >= outcome.target.stats.hp * BIG_HIT_FRACTION ? "big" : "small");
+          }
+          if (outcome.target.currentHp <= 0) reactingAnim.faint();
+        }
+        setSnapshot(snapshotAfter);
+      }
+
       if (outcome.action.kind === "move") {
         actingAnim.windUp();
         actingAnim.lunge();
-      }
-      if (outcome.hit && outcome.target) {
-        if (outcome.damage > 0) {
-          reactingAnim.hit(outcome.damage >= outcome.target.stats.hp * BIG_HIT_FRACTION ? "big" : "small");
-        }
-        if (outcome.target.currentHp <= 0) reactingAnim.faint();
+        const move = getMove(outcome.action.moveId);
+        stageRef.current?.fireProjectile(move.type, isPlayer ? "toEnemy" : "toPlayer");
+        // Wait for the projectile to visually land before the target reacts / HP drains.
+        setTimeout(applyReaction, PROJECTILE_TRAVEL_MS);
+      } else {
+        applyReaction();
       }
 
-      setSnapshot(snapshotAfter);
       setTimeout(() => revealBeat(index + 1), TURN_BEAT_DELAY_MS);
     }
 
@@ -430,31 +438,38 @@ export function BattleScreen({ navigation }: Props) {
       status: enemyCreature.status,
     });
     consumeItem(availableBall.id);
-    enemyAnim.wobble();
+    setResolving(true);
+    stageRef.current?.throwBall();
 
-    if (result.caught) {
-      const member = partyMemberFromParticipant(enemy, "wild");
-      const added = catchCreature(member);
-      const money = currencyRewardForLevel(enemy.creature.level);
-      earnCurrency(money);
-      pushLog([
-        `You threw a ${availableBall.name}!`,
-        added
-          ? `Gotcha! Wild ${enemy.displayName} was caught!`
-          : `Gotcha! ...but your party is full (6/6), so it couldn't be kept.`,
+    // Wait for the ball to visually arrive before it wobbles and the outcome plays out.
+    setTimeout(() => {
+      enemyAnim.wobble();
+      setResolving(false);
+
+      if (result.caught) {
+        const member = partyMemberFromParticipant(enemy, "wild");
+        const added = catchCreature(member);
+        const money = currencyRewardForLevel(enemy.creature.level);
+        earnCurrency(money);
+        pushLog([
+          `You threw a ${availableBall.name}!`,
+          added
+            ? `Gotcha! Wild ${enemy.displayName} was caught!`
+            : `Gotcha! ...but your party is full (6/6), so it couldn't be kept.`,
+        ]);
+        const kinnieDropped = rollKinnieDrop();
+        updatePartyMemberHp(ctx.playerActive.id, ctx.playerActive.currentHp);
+        setRewards({ money, xp: 0, leveledUp: false, kinnieDropped });
+        setOutcome("caught");
+        return;
+      }
+
+      runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId: availableBall.id }, [
+        `You threw a ${availableBall.name}! It broke free after ${result.shakesPassed} shake${
+          result.shakesPassed === 1 ? "" : "s"
+        }.`,
       ]);
-      const kinnieDropped = rollKinnieDrop();
-      updatePartyMemberHp(ctx.playerActive.id, ctx.playerActive.currentHp);
-      setRewards({ money, xp: 0, leveledUp: false, kinnieDropped });
-      setOutcome("caught");
-      return;
-    }
-
-    runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId: availableBall.id }, [
-      `You threw a ${availableBall.name}! It broke free after ${result.shakesPassed} shake${
-        result.shakesPassed === 1 ? "" : "s"
-      }.`,
-    ]);
+    }, BALL_TRAVEL_MS);
   }
 
   const actionsDisabled = !!outcome || forcedSwitchPending || resolving;
@@ -486,27 +501,28 @@ export function BattleScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.combatants}>
-        <CombatantPanel
-          speciesId={enemy.creature.speciesId}
-          name={`Wild ${enemy.displayName}`}
-          types={enemy.creature.types}
-          level={enemy.creature.level}
-          hp={snapshot.enemyHp}
-          maxHp={snapshot.enemyMaxHp}
-          anim={enemyAnim}
-        />
-        <CombatantPanel
-          speciesId={activeMember.speciesId}
-          name={activeMember.displayName}
-          types={activeMember.types}
-          level={activeMember.level}
-          hp={snapshot.playerHp}
-          maxHp={snapshot.playerMaxHp}
-          highlightCrux={snapshot.playerCruxActive}
-          anim={playerAnim}
-        />
-      </View>
+      <BattleStage
+        ref={stageRef}
+        enemy={{
+          speciesId: enemy.creature.speciesId,
+          name: `Wild ${enemy.displayName}`,
+          types: enemy.creature.types,
+          level: enemy.creature.level,
+          hp: snapshot.enemyHp,
+          maxHp: snapshot.enemyMaxHp,
+          anim: enemyAnim,
+        }}
+        player={{
+          speciesId: activeMember.speciesId,
+          name: activeMember.displayName,
+          types: activeMember.types,
+          level: activeMember.level,
+          hp: snapshot.playerHp,
+          maxHp: snapshot.playerMaxHp,
+          highlightCrux: snapshot.playerCruxActive,
+          anim: playerAnim,
+        }}
+      />
 
       <ScrollView style={styles.log} contentContainerStyle={styles.logContent}>
         {log.map((line, i) => (
@@ -736,56 +752,6 @@ export function BattleScreen({ navigation }: Props) {
   );
 }
 
-function CombatantPanel({
-  speciesId,
-  name,
-  types,
-  level,
-  hp,
-  maxHp,
-  highlightCrux,
-  anim,
-}: {
-  speciesId: string;
-  name: string;
-  types: TypeName[];
-  level: number;
-  hp: number;
-  maxHp: number;
-  highlightCrux?: boolean;
-  anim: ReturnType<typeof useCombatantAnimation>;
-}) {
-  return (
-    <View style={[styles.panel, highlightCrux && styles.panelCruxActive]}>
-      <Animated.View pointerEvents="none" style={[styles.flashOverlay, styles.hitFlashOverlay, { opacity: anim.hitFlash }]} />
-      <Animated.View pointerEvents="none" style={[styles.flashOverlay, styles.healFlashOverlay, { opacity: anim.healFlash }]} />
-      <View style={styles.panelTopRow}>
-        <Animated.View
-          style={{
-            opacity: anim.opacity,
-            transform: [{ translateX: anim.shakeX }, { scale: anim.scale }],
-          }}
-        >
-          <CreatureAvatar speciesId={speciesId} types={types} size={64} />
-        </Animated.View>
-        <View style={styles.panelInfo}>
-          <View style={styles.panelHeader}>
-            <Text style={styles.panelName}>{name}</Text>
-            <Text style={styles.panelLevel}>Lv. {level}</Text>
-          </View>
-          <View style={styles.badgeRow}>
-            {types.map((t) => (
-              <TypeBadge key={t} type={t} />
-            ))}
-          </View>
-          <HpBar currentHp={hp} maxHp={maxHp} />
-        </View>
-      </View>
-      {highlightCrux && <Text style={styles.cruxActiveLabel}>Crux Aura active</Text>}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -794,66 +760,6 @@ const styles = StyleSheet.create({
     paddingTop: 56,
     paddingBottom: 20,
     gap: 12,
-  },
-  combatants: {
-    gap: 12,
-  },
-  panel: {
-    position: "relative",
-    overflow: "hidden",
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-  },
-  panelCruxActive: {
-    borderColor: colors.accent,
-  },
-  flashOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  hitFlashOverlay: {
-    backgroundColor: colors.danger,
-  },
-  healFlashOverlay: {
-    backgroundColor: colors.success,
-  },
-  panelTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  panelInfo: {
-    flex: 1,
-  },
-  panelHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  panelName: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  panelLevel: {
-    color: colors.textMuted,
-    fontSize: 14,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  cruxActiveLabel: {
-    color: colors.accent,
-    fontSize: 12,
-    marginTop: 6,
-    fontWeight: "600",
   },
   log: {
     flex: 1,

@@ -18,7 +18,7 @@ export function BagScreen({ navigation }: Props) {
 
   useKeyboardShortcuts({ m: () => navigation.popToTop() });
 
-  const items = itemsByCategory(category);
+  const items = itemsByCategory(category).filter((item) => (inventory[item.id] ?? 0) > 0);
 
   return (
     <ScreenBackground style={styles.container}>

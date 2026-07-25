@@ -59,6 +59,8 @@ interface GameState {
   /** Moves the given party member to the front of the party order, so it leads future battles
    * (the battle screen always picks the first conscious member as the active fighter). */
   setMainPartyMember: (uid: string) => void;
+  /** Renames a party member's displayName (a nickname); ignores blank input. */
+  renamePartyMember: (uid: string, name: string) => void;
   /** Healing Center: fully revives every KO'd (currentHp <= 0) party member to max HP.
    * Deliberately leaves already-conscious members untouched, even if not at full HP —
    * this is a blackout-recovery station, not a full-party top-up. Returns how many were healed. */
@@ -207,6 +209,14 @@ export const useGameStore = create<GameState>()(
       if (index <= 0) return; // already main, or not found
       const reordered = [party[index], ...party.slice(0, index), ...party.slice(index + 1)];
       set({ party: reordered });
+    },
+
+    renamePartyMember: (uid, name) => {
+      const trimmed = name.trim().slice(0, 16);
+      if (!trimmed) return;
+      set((state) => ({
+        party: state.party.map((m) => (m.uid === uid ? { ...m, displayName: trimmed } : m)),
+      }));
     },
 
     healFaintedPartyMembers: () => {

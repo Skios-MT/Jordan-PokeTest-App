@@ -187,7 +187,7 @@ Three lines (Grass/Fire/Water), each three stages, matching the original spec's 
 
 ### 3.2 Legendaries
 
-Three story-gated legendaries (Aegilord — Steel/Fighting, Megalithos — Rock/Psychic, Siroccus — Flying/Ground), each requiring a `story_flag_required` quest flag before they are catchable, matching the gating described in Section 1.6.
+Three legendaries (Aegilord — Steel/Fighting, Megalithos — Rock/Psychic, Siroccus — Flying/Ground), designed with a `storyFlagRequired` quest-flag gate in `src/data/legendaries.json` (Section 1.6), but since no story-flag/quest-flag system was ever actually built (`attemptCatch` in `src/engine/catching.ts` never receives a `storyFlagUnlocked` value, so that gate is inert), they're wired into `buildZoneEncounterTable` (`src/game/encounterTable.ts`) as an ultra-rare wild-encounter tier instead — weight 0.3 each against a common wild creature's weight of 5, so roughly a 1-in-50 chance conditioned on an encounter already triggering. Each spawns at a hard level floor well above the zone's normal range (`legendaryMinLevel` in `src/game/zones.ts`: 25 in Melita Woods, 32 in Luzzu Harbour, 40 in Azure Caverns — `randomLevelAtLeast()` only ever rolls upward from that floor) and uses the closest-fitting real moves from `src/data/moves.json` in place of their flavor-only `signatureMove` name.
 
 ### 3.3 Regional Variants
 
@@ -210,10 +210,13 @@ Splash → Title ("Chivalry & Antiquity") →
   (New Game: Name Entry → Region Select → Starter Quiz → Starter Reveal) / (Continue: Load Save)
    └─▶ MAP (Exploring — the default/root screen)
          ├─▶ "Menu" button / M key → HOME (party HUD + quick links)
-         │        ├─▶ Party Management (release, Use Item, move-relearn, Set as Main)
+         │        ├─▶ Party Management (release, Use Item, move-relearn, Set as Main, Rename)
          │        ├─▶ Creature Index (Codex — grid view, filter by type/zone/caught-status)
-         │        ├─▶ Bag/Inventory (categorized tabs: Balls, Medicine, Key Items, Battle Items)
-         │        └─▶ Shop (buy Balls/Medicine with gold)
+         │        ├─▶ Bag/Inventory (categorized tabs: Balls, Medicine, Key Items, Battle Items —
+         │        │    each tab only lists items you own; a zero-quantity item is hidden, not
+         │        │    shown as "x0")
+         │        ├─▶ Shop (buy Balls/Medicine with gold)
+         │        └─▶ Help (explains the goal, battling, Crux Aura, catching, and controls)
          └─▶ BATTLE VIEW (modal, full-screen), on stepping into dark grass
                ├─▶ Move Select / Invoke Crux / Catch / Use Item / Run Away / Party Switch
                └─▶ Result Screen (win/lose/caught/fled, gold + XP, level-up, Kinnie drop)
@@ -221,7 +224,8 @@ Splash → Title ("Chivalry & Antiquity") →
 
 **Implementation status** (`src/screens/`, wired up via `src/navigation/RootNavigator.tsx`): Title,
 Name Entry, Region Select, Starter Quiz, Starter Select (reveal/confirm), Home, Map, Battle View,
-Party, Codex, Bag, Shop, and a shared Creature Detail screen all exist and are navigable end to end.
+Party, Codex, Bag, Shop, Help, and a shared Creature Detail screen all exist and are navigable end to
+end.
 The title screen's headline is **"Chivalry & Antiquity"** (Project Melita is the dev-facing project
 name, shown as a small subtitle). Region Select is a single-region confirmation screen rather than a
 real choice — Melita's three islands (section 2) are one region, not several to pick between; a
@@ -256,13 +260,20 @@ node-graph-of-many-zones world. Each zone is a genuinely different size and silh
 uniform square: trees carve the outer shape as well as blocking movement, so the walkable footprint
 itself reads as an organic blob, a pier, or a winding passage (`parseMap` validates all rows in a
 zone are equal length; connectivity from the entrance to every dark-grass tile and the exit was
-hand-verified with a throwaway BFS script, not asserted at runtime). Movement is a 4-directional
-D-pad or the arrow keys (web) rather than the spec's tap-to-pathfind (simpler to build correctly
-first); the player avatar is a directional glyph, not sprite art, per the agreed "stylized
+hand-verified with a throwaway BFS script, not asserted at runtime). All three zones were enlarged
+significantly (Melita Woods 15x15, Luzzu Harbour 11x21, Azure Caverns 19x13 — up from roughly a third
+that size originally) to give exploration real room; since that's now bigger than fits on a phone
+screen, `MapScreen.tsx` renders a fixed-size viewport (7 tiles square, or the whole map if it's
+smaller) and translates the map content opposite the player's animated position so the camera follows
+them, clamped at the map's edges via a piecewise-linear `Animated` interpolation
+(`cameraOffset()`) — never scrolling past the map bounds, never panning by hand. Movement is a
+4-directional D-pad or the arrow keys (web) rather than the spec's tap-to-pathfind (simpler to build
+correctly first); the player avatar is a directional glyph, not sprite art, per the agreed "stylized
 placeholders" approach.
 
 The tall-grass tile is now called **Dark Grass** and is deliberately far apart from Path in both hue
-and value — a near-black saturated green with a faint texture glyph vs. a warm, light sandy tan — so
+and value — a near-black saturated green with a warm, light sandy tan Path, plus a small 🌿 icon on
+every Dark Grass tile so the encounter-triggering tile type reads clearly even at a glance — so
 it never reads as "maybe just more path." **Encounters only trigger in Dark Grass** (`isEncounterTile`
 checks for the `"grass"` tile type only; Path and Exit tiles never roll an encounter). Walking onto a
 Dark Grass tile rolls a 19.5% chance (`ENCOUNTER_CHANCE` in `MapScreen.tsx` — bumped 30% from an
@@ -286,6 +297,13 @@ member other than the current lead, which calls `gameStore.setMainPartyMember(ui
 member to the front of the array (preserving the relative order of everyone else); the current lead
 shows a "Main" tag instead of the button, and fainted members don't get the option at all, since
 setting a KO'd creature as lead wouldn't change who actually opens the next battle.
+
+**Renaming**: Creature Detail has a **Rename** control next to a party member's name (species
+entries reached from the Codex aren't renamable) — an inline text field capped at 16 characters,
+calling `gameStore.renamePartyMember(uid, name)`, which trims the input and ignores a blank
+submission rather than clearing the name. This directly rewrites `displayName` (there's no separate
+species-name field to preserve elsewhere), so the new name is what shows everywhere: Party, Home,
+Battle View, and Creature Detail itself.
 
 Battle View is driven by the real engine (`src/engine/battleManager.ts`), including a working Catch
 action (`src/engine/catching.ts` wired to the Bag's ball items), randomized wild encounters, **party
@@ -314,6 +332,21 @@ no effect..."` (from the real type multiplier), a fainted-this-hit line, or `"Bu
 move that failed its accuracy roll (see 1.3a) — not just the bare "X used Y" announcement. Defeating
 or catching a wild creature also rolls a 10% chance to drop a **Kinnie** (never sold, drop-only — see
 4.3), noted in the Result Screen and the battle log.
+
+**Battle stage layout** (`src/screens/components/BattleStage.tsx`): the two stacked info panels were
+replaced with a Pokemon-Yellow-style arrangement on a single sky/ground battle stage — the wild
+creature stands upper-right with its info box (name, level, types, HP bar) upper-left, the player's
+creature stands lower-left, drawn larger to read as "closer to camera," with its own info box
+lower-right. There's still no illustrated sprite art (`CreatureAvatar` is still the generated
+type-colored token, per the agreed "stylized placeholders" approach) — this is a layout and motion
+change, not a sprite upgrade. Every move now fires a type-colored projectile (reusing each type's
+existing `typeColor`/`typeIcon` from `theme.ts` — a red 🔥 dot for Fire, a blue 💧 dot for Water, and
+so on for every type) that animates from attacker to defender before the hit's shake/flash/HP-bar-drop
+plays, so an attack visibly travels and lands rather than the target reacting instantly
+(`BattleStage`'s `fireProjectile()`, exposed via a ref; `BattleScreen` delays the hit reaction by
+`PROJECTILE_TRAVEL_MS` to let it arrive first). Throwing a ball animates the same attacker-to-defender
+arc with a parabolic vertical offset and a spin (`throwBall()`), and `BattleScreen` likewise delays the
+wobble/outcome reaction by `BALL_TRAVEL_MS` so the ball visibly lands before the catch result plays.
 
 **Battle Result pop-up**: the win/lose/caught/fled screen (previously a plain absolutely-positioned
 overlay) is now a real `Modal` (`animationType="fade"`, `src/screens/BattleScreen.tsx`) so it visibly
