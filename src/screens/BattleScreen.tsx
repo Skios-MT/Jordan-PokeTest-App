@@ -4,7 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore, type ExperienceGainResult } from "../state/gameStore";
 import type { BattleParticipant } from "../game/creatureFactory";
-import { buildZoneEncounterTable, rollEncounter } from "../game/encounterTable";
+import { buildBiomeEncounterTable, rollEncounter } from "../game/encounterTable";
 import { getZoneEncounterSettings } from "../game/zones";
 import { creatureFromPartyMember, partyMemberFromParticipant, partyMemberStats } from "../game/party";
 import { xpRewardForLevel, currencyRewardForLevel, effectiveStats } from "../game/progression";
@@ -77,7 +77,8 @@ function snapshotFrom(ctx: BattleContext): BattleSnapshot {
   };
 }
 
-export function BattleScreen({ navigation }: Props) {
+export function BattleScreen({ navigation, route }: Props) {
+  const biome = route.params.biome;
   const selectedLine = useGameStore((s) => s.selectedLine) ?? "Water";
   const currentZoneId = useGameStore((s) => s.currentZoneId);
   const inventory = useGameStore((s) => s.inventory);
@@ -102,8 +103,8 @@ export function BattleScreen({ navigation }: Props) {
   const activeMember = party.find((m) => m.uid === activeUidRef.current);
 
   const encounterTable = useMemo(
-    () => buildZoneEncounterTable(selectedLine, getZoneEncounterSettings(currentZoneId)),
-    [selectedLine, currentZoneId]
+    () => buildBiomeEncounterTable(biome, selectedLine, getZoneEncounterSettings(currentZoneId)),
+    [biome, selectedLine, currentZoneId]
   );
   const enemy = useMemo<BattleParticipant>(
     () => rollEncounter(encounterTable, `enemy-${Math.random().toString(36).slice(2, 8)}`),

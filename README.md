@@ -35,8 +35,8 @@ App.tsx                Expo entry point, renders the navigator
 
 Title ("Chivalry & Antiquity") -> New Game -> Name Entry -> Region Select ->
 Starter Quiz -> Starter Reveal -> **Map** (the default/root screen from then
-on), with Home (party HUD + quick links), Battle View, Party, Codex, Bag, and
-Shop all reachable from Map/Home, matching spec 4.1.
+on), with Home (party HUD + quick links), Battle View, Party, Codex, Bag,
+Shop, and Help all reachable from Map/Home, matching spec 4.1.
 
 - **Name Entry**: the player types their own name, stored in the game store
   and used in narrative text (e.g. the starter reveal screen).
@@ -44,18 +44,23 @@ Shop all reachable from Map/Home, matching spec 4.1.
   crossing, a harbour chore, a festa night); the majority answer assigns a
   Grass/Fire/Water starter automatically, shown on a reveal/confirm screen —
   no more direct tap-to-choose.
-- **Map**: three connected zones (Melita Woods -> Luzzu Harbour -> Azure
-  Caverns), each a large, irregularly-shaped tile grid of its own size (a
-  diamond clearing, a harbour with a pier, a zigzag cave — not a uniform
-  square). A camera viewport follows the player and scrolls/clamps at the
-  map's edges, since the zones are now bigger than one screen. A
-  4-directional D-pad (or arrow keys) moves the avatar toward one exit tile
-  leading to the next (stronger) zone. Walking onto **Dark Grass** (visually
-  distinct from Path — near-black green vs. warm tan, plus a small 🌿 icon)
-  has a 19.5% chance to trigger a wild battle (Path and Exit tiles never
-  do), which plays a screen-flash transition before cutting to Battle View.
-  Each zone also has one **Healing Center** (✚) tile that fully revives any
-  KO'd party members on the spot.
+- **Map**: four connected zones (Melita Woods -> Luzzu Harbour -> Azure
+  Caverns -> Ramla Dunes), each a large, irregularly-shaped tile grid of its
+  own size (a diamond clearing, a harbour with a pier, a zigzag cave, a
+  dune atoll — not a uniform square). A camera viewport follows the player
+  and scrolls/clamps at the map's edges, since the zones are bigger than one
+  screen. A 4-directional D-pad (or arrow keys) moves the avatar. Each zone
+  mixes (at least) two **biome tile types** — Grass 🌿, Rock 🪨, Water 🌊, and
+  Sand 🏜️ — visually distinct from Path and from each other; walking onto
+  any biome tile (never Path or Exit) has a 19.5% chance to trigger a wild
+  battle drawn from that *specific biome's own* creature pool (a Rock tile
+  and a Water tile spawn completely different species — see "Creatures"
+  below), which plays a screen-flash transition before cutting to Battle
+  View. Each zone has one **Healing Center** (✚) tile that fully revives any
+  KO'd party members, and one **Entrance** tile (🚪, where you spawn on
+  arrival) that walks you straight back to the previous zone, landing
+  exactly on the exit tile you used to leave it — so a zone is never a
+  one-way trip.
 - **Battle View**: a Pokemon-Yellow-style layout — the wild creature stands
   upper-right with its info box upper-left, your creature stands lower-left
   (larger, "closer to camera") with its info box lower-right, on a sky/ground
@@ -72,11 +77,12 @@ Shop all reachable from Map/Home, matching spec 4.1.
   a type-colored projectile (reusing each type's color/icon — red 🔥 for
   Fire, blue 💧 for Water, and so on) that visibly travels from attacker to
   defender before the hit lands; throwing a ball arcs it the same path with
-  a spin. Wild encounters are drawn from a weighted encounter table whose
-  level range increases per zone, plus a vanishingly rare chance (each zone's
-  three story legendaries, `src/data/legendaries.json`) of a legendary
-  encounter at a hard-floor level (25 in Melita Woods, rising in later
-  zones) far above the zone's normal range. Winning or catching grants
+  a spin. Wild encounters are drawn from the triggering tile's biome-specific
+  weighted table, whose level range increases per zone, plus a vanishingly
+  rare chance (the three story legendaries, `src/data/legendaries.json`,
+  available from every biome) of a legendary encounter at a hard-floor level
+  (25 in Melita Woods, rising in later zones) far above the zone's normal
+  range. Winning or catching grants
   gold/XP and a 10% chance to drop a rare **Kinnie** item; each combatant
   shows a generated, type-colored avatar with lunge/hit/faint/heal/crux-glow
   animations and a flash tint on big hits. The win/lose/caught/fled screen
@@ -111,10 +117,25 @@ Bag, `P` opens Party, `M` opens/returns-to the Home menu, and `R` flees a
 battle. Hovering a button for 2+ seconds shows an explanatory tooltip.
 
 Starters begin at level 5; stats scale with level (`src/game/progression.ts`)
-rather than staying flat. The creature roster includes one original wild
-species (Fossary, Bug/Grass) plus the three regional variants, all fully
-battle-ready with real stats and movesets — shared across all three zones,
-since there's no real per-zone species pool yet (only the level range shifts).
+rather than staying flat.
+
+**Creatures**: each biome tile type draws only from its own themed wild
+species pool (`src/game/encounterTable.ts`), not one shared list for the
+whole game:
+- **Grass** 🌿 — Fossary (Bug/Grass), plus the Grass starter line when it's
+  not your own.
+- **Rock** 🪨 — Qortong, Xrobbog, Karkarun, Bulqajra, and Santwarr, plus the
+  regional variants Ferrocane and Katakomba, and the Fire starter line
+  (paired with Rock for its volcanic/mountain flavor).
+- **Water** 🌊 — Luzzitt, Marsupp, Kalanka, Vurjenn, and Ondallus, plus the
+  regional variant Zavorra, and the Water starter line when it's not yours.
+- **Sand** 🏜️ — Ramliet, Xemxun, Dunkorr, Sirokk, and Ossijan (all
+  Ground-types, sharing the new Sand Blast move).
+
+The three story legendaries (Aegilord, Megalithos, Siroccus) remain a
+vanishingly rare (~1-in-50) universal tier layered on top of every biome
+rather than being biome-locked, since there are too few of them to split
+four ways meaningfully.
 
 **Progress saves automatically** (`src/state/gameStore.ts`, via zustand's
 `persist` middleware backed by AsyncStorage, which uses `localStorage` on
@@ -126,7 +147,7 @@ clean, wiping any existing save first.
 
 Not built: an XP-bar animation or catch-prompt flourish on the result screen,
 PP tracking or move tooltips, tap-to-pathfind movement (the map uses a D-pad
-instead), more than 3 zones, and sprite/character art (the avatar is a
+instead), more than 4 zones, and sprite/character art (the avatar is a
 generated colored token, not illustrated art).
 
 ### Getting started

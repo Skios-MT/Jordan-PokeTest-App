@@ -8,6 +8,7 @@
     { "id": "rock_throw", "name": "Rock Throw", "type": "Rock", "category": "physical", "power": 65, "accuracy": 80, "basePriority": 0 },
     { "id": "shadow_snap", "name": "Shadow Snap", "type": "Ghost", "category": "special", "power": 55, "accuracy": 90, "basePriority": 0 },
     { "id": "metal_claw", "name": "Metal Claw", "type": "Steel", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 },
-    { "id": "bug_bite", "name": "Bug Bite", "type": "Bug", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 }
+    { "id": "bug_bite", "name": "Bug Bite", "type": "Bug", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "sand_blast", "name": "Sand Blast", "type": "Ground", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 }
   ]
 }

@@ -11,6 +11,7 @@ import {
   type BattleParticipant,
   type StarterLineName,
 } from "./creatureFactory";
+import type { BiomeType } from "./mapData";
 
 const regionalVariants = RegionalVariantsFileSchema.parse(regionalVariantsData).regionalVariants;
 const wildCreatures = WildCreaturesFileSchema.parse(wildCreaturesData).wildCreatures;
@@ -22,12 +23,23 @@ const legendaries = LegendariesFileSchema.parse(legendariesData).legendaries;
 const LEGENDARY_MOVE_IDS: Record<string, string[]> = {
   aegilord: ["metal_claw", "tackle"],
   megalithos: ["rock_throw", "tackle"],
-  siroccus: ["rock_throw", "tackle"],
+  siroccus: ["sand_blast", "tackle"],
 };
 
-/** Vanishingly rare relative to the rest of the table (a single wild creature alone outweighs
- * all three legendaries combined) — this is the "you might see one, once in a long while" tier. */
+/** Vanishingly rare relative to the rest of any biome's table (a single wild creature alone
+ * outweighs all three legendaries combined) — this is the "you might see one, once in a long
+ * while" tier, and unlike everything else here it's available from every biome rather than
+ * being biome-locked, since there are only three of them across the whole game. */
 const LEGENDARY_ENCOUNTER_WEIGHT = 0.3;
+
+/** Which starter line's "other starter" wild encounter fits which biome, by loose elemental
+ * association. Fire has no dedicated biome of its own, so it's paired with Rock (volcanic/
+ * mountain flavor) rather than appearing everywhere. */
+const STARTER_LINE_BIOME: Record<StarterLineName, BiomeType> = {
+  Grass: "grass",
+  Water: "water",
+  Fire: "rock",
+};
 
 export interface EncounterOption {
   weight: number;
@@ -43,13 +55,16 @@ export interface ZoneEncounterConfig {
 }
 
 /**
- * Weighted wild-encounter pool for a zone: the zone's own wild species
- * (Fossary) is common, an "other starter line" wild encounter is uncommon,
- * and the regional variants are rare — there's no real per-zone species
- * pool yet (spec 2.2's "seasonal spawn table" isn't built), every zone
- * draws from the same species list and only the level range shifts by tier.
+ * Weighted wild-encounter pool for one specific biome tile (see mapData.ts's BiomeType) — each
+ * biome only spawns wildCreatures.json/regionalVariants.json entries tagged with that exact
+ * biome, so a Rock tile and a Water tile in the same zone (or in different zones) draw from
+ * genuinely different species, not one shared list with only the level range shifting. The three
+ * legendaries remain a vanishingly rare universal layer on top of every biome (see
+ * LEGENDARY_ENCOUNTER_WEIGHT) rather than being biome-locked themselves, since there are too few
+ * of them to meaningfully split four ways.
  */
-export function buildZoneEncounterTable(
+export function buildBiomeEncounterTable(
+  biome: BiomeType,
   playerLine: StarterLineName,
   config: ZoneEncounterConfig
 ): EncounterOption[] {
@@ -57,6 +72,7 @@ export function buildZoneEncounterTable(
   const table: EncounterOption[] = [];
 
   for (const wc of wildCreatures) {
+    if (wc.biome !== biome) continue;
     table.push({
       weight: 5,
       build: (id) =>
@@ -65,6 +81,7 @@ export function buildZoneEncounterTable(
   }
 
   for (const line of otherStarterLines(playerLine)) {
+    if (STARTER_LINE_BIOME[line] !== biome) continue;
     table.push({
       weight: 3,
       build: (id) => buildStarterParticipant(line, randomWildLevel(baseLevel, levelSpread), id),
@@ -72,6 +89,7 @@ export function buildZoneEncounterTable(
   }
 
   for (const rv of regionalVariants) {
+    if (rv.biome !== biome) continue;
     table.push({
       weight: 1,
       build: (id) =>

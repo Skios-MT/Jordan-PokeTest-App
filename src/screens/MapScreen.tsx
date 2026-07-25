@@ -3,7 +3,16 @@ import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useGameStore } from "../state/gameStore";
-import { getMap, isWalkable, isEncounterTile, isExitTile, isHealTile, type TileType } from "../game/mapData";
+import {
+  getMap,
+  isWalkable,
+  biomeAt,
+  isExitTile,
+  isEntranceTile,
+  isHealTile,
+  findTilePosition,
+  type TileType,
+} from "../game/mapData";
 import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { HoverTip } from "./components/HoverTip";
@@ -33,15 +42,26 @@ const DIRECTION_DELTA: Record<Direction, { dRow: number; dCol: number; glyph: st
   right: { dRow: 0, dCol: 1, glyph: "▶" },
 };
 
-/** Dark Grass is deliberately a world apart from Path in both hue and value —
- * a near-black, saturated green vs. a warm, light sandy tan — so the one tile
- * type that can trigger an encounter never reads as "maybe just more path." */
+/** Every biome tile (the ones that can trigger an encounter) is deliberately a world apart from
+ * Path in both hue and value, and from each other, so no biome ever reads as "maybe just more
+ * path" or gets confused for a different biome. */
 const TILE_COLORS: Record<TileType, string> = {
   tree: "#0b2a1a",
   path: "#9c8a6b",
+  entrance: "#4a3a6a",
   grass: "#0c2e1a",
+  rock: "#5c5346",
+  water: "#1f4e79",
+  sand: "#d8c07a",
   exit: "#7a5c2e",
   heal: "#2e5c8a",
+};
+
+const BIOME_GLYPHS: Record<"grass" | "rock" | "water" | "sand", string> = {
+  grass: "🌿",
+  rock: "🪨",
+  water: "🌊",
+  sand: "🏜️",
 };
 
 /**
@@ -63,6 +83,9 @@ function cameraOffset(playerAnim: Animated.Value, mapPx: number, viewportPx: num
 
 export function MapScreen({ navigation, route }: Props) {
   const map = getMap(route.params.zoneId);
+  // Normally the zone's own default spawn point — but when walking back into a zone via its
+  // entrance tile, this is the exact exit tile the player used to leave it in the first place.
+  const startPosition = route.params.startAt ?? map.playerStart;
   const setCurrentZone = useGameStore((s) => s.setCurrentZone);
   const healFaintedPartyMembers = useGameStore((s) => s.healFaintedPartyMembers);
 
@@ -71,15 +94,15 @@ export function MapScreen({ navigation, route }: Props) {
   const viewportWidth = Math.min(VIEWPORT_TILES * TILE_SIZE, mapPixelWidth);
   const viewportHeight = Math.min(VIEWPORT_TILES * TILE_SIZE, mapPixelHeight);
 
-  const [position, setPosition] = useState(map.playerStart);
+  const [position, setPosition] = useState(startPosition);
   const [facing, setFacing] = useState<Direction>("down");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const anim = useRef(
     new Animated.ValueXY({
-      x: map.playerStart.col * TILE_SIZE,
-      y: map.playerStart.row * TILE_SIZE,
+      x: startPosition.col * TILE_SIZE,
+      y: startPosition.row * TILE_SIZE,
     })
   ).current;
   const encounterFlash = useRef(new Animated.Value(0)).current;
@@ -117,6 +140,17 @@ export function MapScreen({ navigation, route }: Props) {
         return;
       }
 
+      // Walking back onto the entrance tile (where you originally spawned in this zone) returns
+      // to the previous zone, landing exactly on the exit tile used to leave it — not that zone's
+      // own default spawn point, so the round trip feels continuous rather than resetting you.
+      if (isEntranceTile(map, next.row, next.col) && map.previousZoneId) {
+        const prevMap = getMap(map.previousZoneId);
+        const startAt = findTilePosition(prevMap, "exit") ?? prevMap.playerStart;
+        setCurrentZone(map.previousZoneId);
+        navigation.reset({ index: 0, routes: [{ name: "Map", params: { zoneId: map.previousZoneId, startAt } }] });
+        return;
+      }
+
       if (isHealTile(map, next.row, next.col)) {
         const healedCount = healFaintedPartyMembers();
         setMessage(
@@ -128,7 +162,8 @@ export function MapScreen({ navigation, route }: Props) {
         return;
       }
 
-      if (isEncounterTile(map, next.row, next.col) && Math.random() < ENCOUNTER_CHANCE) {
+      const biome = biomeAt(map, next.row, next.col);
+      if (biome && Math.random() < ENCOUNTER_CHANCE) {
         // Screen-flash transition before cutting to Battle — busy stays true
         // for the whole sequence so the player can't walk away mid-flash.
         const flashAnimations = ENCOUNTER_FLASH_SEQUENCE.map((toValue) =>
@@ -137,7 +172,7 @@ export function MapScreen({ navigation, route }: Props) {
         Animated.sequence(flashAnimations).start(() => {
           encounterFlash.setValue(0);
           setBusy(false);
-          navigation.navigate("Battle");
+          navigation.navigate("Battle", { biome });
         });
         return;
       }
@@ -160,8 +195,9 @@ export function MapScreen({ navigation, route }: Props) {
     <ScreenBackground style={styles.container}>
       <Text style={styles.title}>{map.zoneName}</Text>
       <Text style={styles.subtitle}>
-        Walk into the dark grass — wild creatures lurk there, nowhere else. The Healing Center (✚)
-        revives any fainted party members.
+        Walk into Grass, Rock, Water, or Sand tiles — wild creatures lurk there, nowhere else. The
+        Healing Center (✚) revives any fainted party members, and walking back onto the entrance
+        tile returns to the previous zone.
         {map.exitTo ? " The lit path leads onward." : " This is as far as the path goes for now."}
       </Text>
 
@@ -180,8 +216,11 @@ export function MapScreen({ navigation, route }: Props) {
             <View key={rowIndex} style={styles.row}>
               {row.map((tile, colIndex) => (
                 <View key={colIndex} style={[styles.tile, { backgroundColor: TILE_COLORS[tile] }]}>
-                  {tile === "grass" && <Text style={styles.grassGlyph}>🌿</Text>}
+                  {tile in BIOME_GLYPHS && (
+                    <Text style={styles.biomeGlyph}>{BIOME_GLYPHS[tile as keyof typeof BIOME_GLYPHS]}</Text>
+                  )}
                   {tile === "heal" && <Text style={styles.healGlyph}>✚</Text>}
+                  {tile === "entrance" && <Text style={styles.entranceGlyph}>🚪</Text>}
                 </View>
               ))}
             </View>
@@ -264,7 +303,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  grassGlyph: {
+  biomeGlyph: {
     fontSize: 16,
     opacity: 0.75,
   },
@@ -272,6 +311,10 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 20,
     fontWeight: "700",
+  },
+  entranceGlyph: {
+    fontSize: 16,
+    opacity: 0.85,
   },
   encounterFlash: {
     position: "absolute",

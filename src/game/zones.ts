@@ -13,6 +13,7 @@ const ZONE_ENCOUNTER_SETTINGS: Record<string, ZoneEncounterSettings> = {
   melita_woods: { baseLevel: 4, levelSpread: 2, legendaryMinLevel: 25 },
   luzzu_harbour: { baseLevel: 10, levelSpread: 3, legendaryMinLevel: 32 },
   azure_caverns: { baseLevel: 17, levelSpread: 3, legendaryMinLevel: 40 },
+  ramla_dunes: { baseLevel: 24, levelSpread: 4, legendaryMinLevel: 48 },
 };
 
 const DEFAULT_SETTINGS: ZoneEncounterSettings = { baseLevel: 4, levelSpread: 2, legendaryMinLevel: 25 };

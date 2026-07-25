@@ -251,44 +251,59 @@ ferry crossing / harbour chore / festa fireworks, each option leaning Fire/Water
 majority-answer line is assigned automatically and confirmed on a reveal screen
 (`StarterSelectScreen.tsx`) rather than picked by hand.
 
-**Map** (`src/game/mapData.ts`, `src/game/zones.ts`, `src/screens/MapScreen.tsx`) is three
-hand-authored irregular tile grids — Melita Woods (a 9x9 diamond-shaped clearing), Luzzu Harbour (a
-7x11 harbour with a narrow pier jutting out to the exit), Azure Caverns (a 9x9 zigzag cave) — chained
-in a line, each with one exit tile leading to the next zone and one entrance (where the player
-arrives), matching the "one exit, one entrance" brief rather than the spec's full
+**Map** (`src/game/mapData.ts`, `src/game/zones.ts`, `src/screens/MapScreen.tsx`) is four
+hand-authored irregular tile grids — Melita Woods (a 15x15 diamond-shaped clearing, Grass+Rock),
+Luzzu Harbour (an 11x21 harbour with a narrow pier jutting out to the exit, Water+Sand), Azure
+Caverns (a 19x13 zigzag cave, Rock+Water), Ramla Dunes (a 13x21 dune atoll, Sand+Grass) — chained in
+a line, matching the "one exit, one entrance" brief rather than the spec's full
 node-graph-of-many-zones world. Each zone is a genuinely different size and silhouette rather than a
 uniform square: trees carve the outer shape as well as blocking movement, so the walkable footprint
-itself reads as an organic blob, a pier, or a winding passage (`parseMap` validates all rows in a
-zone are equal length; connectivity from the entrance to every dark-grass tile and the exit was
-hand-verified with a throwaway BFS script, not asserted at runtime). All three zones were enlarged
-significantly (Melita Woods 15x15, Luzzu Harbour 11x21, Azure Caverns 19x13 — up from roughly a third
-that size originally) to give exploration real room; since that's now bigger than fits on a phone
-screen, `MapScreen.tsx` renders a fixed-size viewport (7 tiles square, or the whole map if it's
-smaller) and translates the map content opposite the player's animated position so the camera follows
-them, clamped at the map's edges via a piecewise-linear `Animated` interpolation
-(`cameraOffset()`) — never scrolling past the map bounds, never panning by hand. Movement is a
-4-directional D-pad or the arrow keys (web) rather than the spec's tap-to-pathfind (simpler to build
-correctly first); the player avatar is a directional glyph, not sprite art, per the agreed "stylized
-placeholders" approach.
+itself reads as an organic blob, a pier, a winding passage, or an atoll (`parseMap` validates all
+rows in a zone are equal length; connectivity from the entrance to every biome tile, the Healing
+Center, and the exit is asserted at *test* time now — see `src/game/__tests__/mapData.test.ts` — not
+just a throwaway hand-verification script). Since these zones don't fit on a phone screen,
+`MapScreen.tsx` renders a fixed-size viewport (7 tiles square, or the whole map if it's smaller) and
+translates the map content opposite the player's animated position so the camera follows them,
+clamped at the map's edges via a piecewise-linear `Animated` interpolation (`cameraOffset()`) —
+never scrolling past the map bounds, never panning by hand. Movement is a 4-directional D-pad or the
+arrow keys (web) rather than the spec's tap-to-pathfind (simpler to build correctly first); the
+player avatar is a directional glyph, not sprite art, per the agreed "stylized placeholders"
+approach.
 
-The tall-grass tile is now called **Dark Grass** and is deliberately far apart from Path in both hue
-and value — a near-black saturated green with a warm, light sandy tan Path, plus a small 🌿 icon on
-every Dark Grass tile so the encounter-triggering tile type reads clearly even at a glance — so
-it never reads as "maybe just more path." **Encounters only trigger in Dark Grass** (`isEncounterTile`
-checks for the `"grass"` tile type only; Path and Exit tiles never roll an encounter). Walking onto a
-Dark Grass tile rolls a 19.5% chance (`ENCOUNTER_CHANCE` in `MapScreen.tsx` — bumped 30% from an
-original 15% baseline) to trigger a wild battle drawn from `src/game/encounterTable.ts`'s weighted
-pool, whose level range is set per zone in `zones.ts` — later zones spawn stronger wild creatures.
-Triggering an encounter plays a screen-flash transition (a quick burst of white flashes, the classic
-"surprise encounter" cut from the mainline games — `ENCOUNTER_FLASH_SEQUENCE` in `MapScreen.tsx`)
-before navigating into Battle View, instead of cutting instantly.
+**Biome tiles** (`BiomeType` in `mapData.ts`: `"grass" | "rock" | "water" | "sand"`) replace the
+single "Dark Grass" tile type from earlier in this project — every zone mixes at least two, each
+rendered in its own distinct color plus a small icon (🌿/🪨/🌊/🏜️) so no biome ever reads as "maybe
+just more path" or gets confused for a different biome. **Encounters trigger on any biome tile**
+(`isEncounterTile`/`biomeAt` — Path, Exit, Entrance, and Heal tiles never roll one). Walking onto one
+rolls a 19.5% chance (`ENCOUNTER_CHANCE` in `MapScreen.tsx` — bumped 30% from an original 15%
+baseline) to trigger a wild battle drawn from *that specific biome's own* weighted pool
+(`buildBiomeEncounterTable`, section 3.3), whose level range is set per zone in `zones.ts` — later
+zones spawn stronger wild creatures. Triggering an encounter plays a screen-flash transition (a quick
+burst of white flashes, the classic "surprise encounter" cut from the mainline games —
+`ENCOUNTER_FLASH_SEQUENCE` in `MapScreen.tsx`) before navigating into Battle View (passing which
+biome triggered it as a route param, so Battle View knows which pool to roll from), instead of
+cutting instantly.
 
 Each zone also has exactly one **Healing Center** tile (✚, distinct blue) reachable from the entrance
-without crossing Dark Grass. Stepping onto it fully revives every currently-KO'd (`currentHp <= 0`)
+without crossing a biome tile. Stepping onto it fully revives every currently-KO'd (`currentHp <= 0`)
 party member to max HP via `gameStore.healFaintedPartyMembers()` — deliberately *only* those, not a
 full-party top-up like the mainline games' Pokemon Centers; a conscious-but-damaged party member is
 left as-is. This is the mechanism for recovering from a full-party blackout without needing to catch a
 new lead or grind currency for medicine.
+
+**Zone navigation is two-way** (previously a one-way bug: walking through an exit tile called
+`navigation.reset()`, which discarded the previous zone's screen entirely, and no tile anywhere led
+back to it). Each zone's player-start tile is now its own distinct `"entrance"` tile type
+(rendered with a 🚪 icon) rather than a plain path tile; walking onto it — which only happens by
+actively stepping back onto your own spawn point, never on arrival itself, since arrival is a mount,
+not a move — navigates to `TileMap.previousZoneId` (`null` only for the very first zone) and drops
+the player exactly on *that* zone's own exit tile (`findTilePosition(prevMap, "exit")`), not its
+default spawn point, so a round trip feels continuous rather than resetting progress. `Map`'s route
+params gained an optional `startAt: {row, col}` for exactly this purpose; the `TileMap`/`Battle`
+route param types and every `parseMap()` call were updated accordingly, and
+`src/game/__tests__/mapData.test.ts` asserts the forward (`exitTo`) and backward
+(`previousZoneId`) links agree with each other in both directions for every zone, so a wiring
+mistake between them fails a test instead of shipping as a silent dead end.
 
 **The active battler is always the first conscious member of the `party` array**
 (`party.find((m) => m.currentHp > 0)` in `BattleScreen.tsx`), so battle order follows party order, not
@@ -388,11 +403,24 @@ creatures (`currencyRewardForLevel`), starting balance 50. The starting Bag is d
 3 Pastizz and 3 Greca Traps only; Melitan Ball, Festa Trap, Qassata, and Ftira biz-Zejt all start at
 0 and must be bought.
 
-The creature roster (section 3.3) now includes one original wild species, **Fossary** (Bug/Grass,
-`src/data/wildCreatures.json`), and the three regional variants are fully battle-ready with real
-stats and movesets in `src/data/regionalVariants.json` — still a small roster overall (starters +
-Fossary + 3 variants + 3 legendaries) shared across all three zones; only the level range shifts by
-zone, not the species pool, since there's no real per-zone spawn table yet.
+**Per-biome creature pools** (`src/game/encounterTable.ts`, `src/data/wildCreatures.json`): every
+wildCreature and regionalVariant is tagged with a `biome` (`"grass" | "rock" | "water" | "sand"`,
+`BiomeSchema` in `schemas.ts`) matching the map tile types in section 4.1, and
+`buildBiomeEncounterTable(biome, playerLine, config)` only includes species tagged with the exact
+biome that triggered the encounter — a Rock tile and a Water tile draw from genuinely disjoint
+species lists, not one shared pool with only the level range shifting per zone (the previous gap
+this section used to flag). The roster: **Grass** — Fossary (Bug/Grass) plus the Grass starter
+line; **Rock** — Qortong, Xrobbog, Karkarun, Bulqajra, Santwarr (`wildCreatures.json`), plus
+Ferrocane and Katakomba (`regionalVariants.json`, both retagged from their original
+zone-agnostic "rare" tier to `biome: "rock"`), plus the Fire starter line (Fire has no biome of
+its own, so it's paired with Rock for volcanic/mountain flavor); **Water** — Luzzitt, Marsupp,
+Kalanka, Vurjenn, Ondallus, plus Zavorra (retagged `biome: "water"`), plus the Water starter
+line; **Sand** — Ramliet, Xemxun, Dunkorr, Sirokk, Ossijan, all Ground-type and sharing the new
+**Sand Blast** move (`src/data/moves.json`) added because no Ground-type move previously existed
+in the (very small) move pool. The three legendaries remain a universal ~1-in-50-conditioned-on-an-
+encounter rare tier available from every biome (`LEGENDARY_ENCOUNTER_WEIGHT = 0.3`) rather than
+being biome-locked themselves, since splitting only three of them four ways wouldn't be
+meaningful.
 
 ### 4.2 Touch Controls
 

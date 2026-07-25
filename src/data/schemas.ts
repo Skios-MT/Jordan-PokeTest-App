@@ -21,6 +21,10 @@ export const TypeNameSchema = z.enum([
   "Dragon",
 ]);
 
+/** Matches mapData.ts's BiomeType — kept as a separate literal union here (rather than importing
+ * from src/game/) so src/data/ has no dependency on src/game/. */
+export const BiomeSchema = z.enum(["grass", "rock", "water", "sand"]);
+
 export const StatBlockSchema = z.object({
   hp: z.number().int().positive(),
   atk: z.number().int().positive(),
@@ -71,6 +75,7 @@ export const RegionalVariantSchema = z.object({
   flavor: z.string(),
   baseStats: StatBlockSchema,
   moveIds: z.array(z.string()).min(1).max(4),
+  biome: BiomeSchema,
 });
 
 export const RegionalVariantsFileSchema = z.object({
@@ -126,13 +131,14 @@ export const WildCreatureSchema = z.object({
   flavor: z.string(),
   baseStats: StatBlockSchema,
   moveIds: z.array(z.string()).min(1).max(4),
-  zone: z.string(),
+  biome: BiomeSchema,
 });
 
 export const WildCreaturesFileSchema = z.object({
   wildCreatures: z.array(WildCreatureSchema),
 });
 
+export type Biome = z.infer<typeof BiomeSchema>;
 export type TypeName = z.infer<typeof TypeNameSchema>;
 export type StatBlock = z.infer<typeof StatBlockSchema>;
 export type StarterLine = z.infer<typeof StarterLineSchema>;
