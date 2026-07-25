@@ -40,12 +40,15 @@ export const StarterStageSchema = z.object({
   stage: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   types: z.array(TypeNameSchema).min(1).max(2),
   evolvesAtLevel: z.number().int().positive().nullable(),
+  /** This stage's own reference stat block (see progression.ts's "level-50 reference" scaling) —
+   * every stage has its own now, not just the final one, so evolving actually changes stats
+   * rather than just the displayed name/species. */
+  baseStats: StatBlockSchema,
 });
 
 export const StarterLineSchema = z.object({
   line: z.enum(["Grass", "Fire", "Water"]),
   stages: z.array(StarterStageSchema).length(3),
-  baseStatsFinal: StatBlockSchema,
   signatureMove: z.string(),
   rideAbility: z.string().optional(),
 });

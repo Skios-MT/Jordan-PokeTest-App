@@ -6,8 +6,13 @@ import { useGameStore, type ExperienceGainResult } from "../state/gameStore";
 import type { BattleParticipant } from "../game/creatureFactory";
 import { buildBiomeEncounterTable, rollEncounter } from "../game/encounterTable";
 import { getZoneEncounterSettings } from "../game/zones";
-import { creatureFromPartyMember, partyMemberFromParticipant, partyMemberStats } from "../game/party";
-import { xpRewardForLevel, currencyRewardForLevel, effectiveStats } from "../game/progression";
+import {
+  creatureFromPartyMember,
+  partyMemberFromParticipant,
+  partyMemberStats,
+  applyLevelUp,
+} from "../game/party";
+import { xpRewardForLevel, currencyRewardForLevel } from "../game/progression";
 import { getMove } from "../game/movesRepo";
 import { pickBestAvailableBall, getItem, usableItems } from "../game/itemsRepo";
 import { BattleStateMachine, type Winner, type ActionOutcome } from "../engine/battleManager";
@@ -23,6 +28,7 @@ import { BattleStage, PROJECTILE_TRAVEL_MS, BALL_TRAVEL_MS, type BattleStageHand
 import { HoverTip } from "./components/HoverTip";
 import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { LevelUpModal, type LevelUpRevealData } from "./components/LevelUpModal";
+import { EvolutionModal, type EvolutionRevealData } from "./components/EvolutionModal";
 import { colors } from "./theme";
 
 /** Chance a defeated or caught wild creature drops a Kinnie — rare, never sold. */
@@ -133,6 +139,9 @@ export function BattleScreen({ navigation, route }: Props) {
   const [forcedSwitchPending, setForcedSwitchPending] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [levelUpReveal, setLevelUpReveal] = useState<LevelUpRevealData | null>(null);
+  /** Takes priority over levelUpReveal — an evolution reveal always plays first, then falls
+   * through to the stat-comparison screen once dismissed (see the render's priority chain). */
+  const [evolutionReveal, setEvolutionReveal] = useState<EvolutionRevealData | null>(null);
   /** Set when a level-up needs to finish resolving (mutating ctx, consuming the item,
    * continuing the turn) only once the player dismisses the LevelUpModal — e.g. using a
    * Kinnie mid-battle should pause on the stat-comparison screen before the enemy's turn plays. */
@@ -189,10 +198,13 @@ export function BattleScreen({ navigation, route }: Props) {
     });
 
     if (xpResult?.leveledUp && memberBefore && oldStats) {
+      if (xpResult.evolution) setEvolutionReveal(xpResult.evolution);
       setLevelUpReveal({
-        speciesId: memberBefore.speciesId,
-        types: memberBefore.types,
-        displayName: memberBefore.displayName,
+        // Post-evolution species/types/name (xpResult.member), not memberBefore's — a level-up
+        // that evolves the creature should show the comparison for what it now actually is.
+        speciesId: xpResult.member.speciesId,
+        types: xpResult.member.types,
+        displayName: xpResult.member.displayName,
         oldLevel: memberBefore.level,
         newLevel: xpResult.newLevel,
         oldStats,
@@ -390,16 +402,20 @@ export function BattleScreen({ navigation, route }: Props) {
       const oldStats = partyMemberStats(activeMember);
       const oldLevel = activeMember.level;
       const prevMaxHp = ctx.playerActive.stats.hp;
-      const newLevel = oldLevel + 1;
-      const newStats = effectiveStats(activeMember.baseStats, newLevel);
+      // Preview via the same pure function the store will apply on dismiss (see below) — this is
+      // how the evolution check (and any resulting species/type/stat change) gets surfaced here,
+      // rather than duplicating the level-up math inline.
+      const { member: leveledMember, evolution } = applyLevelUp(activeMember);
+      const newStats = partyMemberStats(leveledMember);
 
       setShowItems(false);
+      if (evolution) setEvolutionReveal(evolution);
       setLevelUpReveal({
-        speciesId: activeMember.speciesId,
-        types: activeMember.types,
-        displayName: name,
+        speciesId: leveledMember.speciesId,
+        types: leveledMember.types,
+        displayName: leveledMember.displayName,
         oldLevel,
-        newLevel,
+        newLevel: leveledMember.level,
         oldStats,
         newStats,
       });
@@ -408,7 +424,9 @@ export function BattleScreen({ navigation, route }: Props) {
       // the stat-comparison screen — the enemy's move shouldn't play out underneath it.
       afterLevelUpDismissRef.current = () => {
         const hpGain = newStats.hp - prevMaxHp;
-        ctx.playerActive.level = newLevel;
+        ctx.playerActive.speciesId = leveledMember.speciesId;
+        ctx.playerActive.types = leveledMember.types;
+        ctx.playerActive.level = leveledMember.level;
         ctx.playerActive.stats = newStats;
         ctx.playerActive.currentHp = Math.min(newStats.hp, ctx.playerActive.currentHp + hpGain);
 
@@ -418,7 +436,9 @@ export function BattleScreen({ navigation, route }: Props) {
 
         runTurn({ kind: "item", actorId: ctx.playerActive.id, itemId }, [
           `You used the ${item.name}!`,
-          `${name} grew to level ${newLevel}!`,
+          evolution
+            ? `${evolution.oldDisplayName} evolved into ${evolution.newDisplayName}!`
+            : `${name} grew to level ${leveledMember.level}!`,
         ]);
       };
     }
@@ -718,11 +738,16 @@ export function BattleScreen({ navigation, route }: Props) {
         </View>
       )}
 
-      {/* The level-up stat comparison takes priority — the battle result pop-up appears
-          once it's dismissed, so a level-up from the battle's XP is never hidden behind it. */}
-      {levelUpReveal && <LevelUpModal data={levelUpReveal} onDismiss={handleDismissLevelUp} />}
+      {/* Priority chain: an evolution reveal (if any) plays first, then the level-up stat
+          comparison, then the battle result pop-up — each set together but shown one at a time,
+          so a level-up (and any evolution it triggers) is never hidden behind the result. */}
+      {evolutionReveal ? (
+        <EvolutionModal data={evolutionReveal} onDismiss={() => setEvolutionReveal(null)} />
+      ) : (
+        levelUpReveal && <LevelUpModal data={levelUpReveal} onDismiss={handleDismissLevelUp} />
+      )}
 
-      <Modal visible={!!outcome && !levelUpReveal} transparent animationType="fade" onRequestClose={() => {}}>
+      <Modal visible={!!outcome && !levelUpReveal && !evolutionReveal} transparent animationType="fade" onRequestClose={() => {}}>
         <View style={styles.resultOverlay}>
           <Text style={styles.resultTitle}>
             {outcome === "player"

@@ -183,7 +183,11 @@ Implemented in `src/data/starters.json`, `src/data/legendaries.json`, `src/data/
 
 ### 3.1 Starters
 
-Three lines (Grass/Fire/Water), each three stages, matching the original spec's stat blocks and signature moves. The Water line's final stage (Marinedge) carries the `surf_and_submerge` ride ability referenced in Section 2.3.
+Three lines (Grass/Fire/Water), each three stages, matching the original spec's stat blocks and signature moves. The Water line's final stage (Marinedge) carries the `surf_and_submerge` ride ability referenced in Section 2.3. Every stage now carries its own authored `baseStats` block in `src/data/starters.json` (stage-1/stage-2 stats scaled to ~60-65%/~80-85% of the final stage's totals) rather than only the final stage having real numbers.
+
+**Evolution**: each stage but the last has an `evolvesAtLevel` threshold; `src/game/creatureFactory.ts`'s `checkEvolution()` and `src/game/party.ts`'s `resolveEvolutionChain()` are invoked from both level-up paths (`addExperience` for battle XP, `applyLevelUp` for the Kinnie item, in-battle and out-of-battle alike) so there's exactly one place evolution logic lives. A level-up that crosses more than one threshold at once (a large XP grant) resolves in a loop and reports the true starting form → true final form, skipping any intermediate stage's reveal. A custom nickname (set via **Rename**) survives evolution — only a creature still using its stage's own default name gets renamed to the new stage's default; species/types/stats always update, but `moveIds` never does (there's no move-learning system, so a Vine Lash-carrying Calfleaf keeps Vine Lash through every stage). A wild-caught creature from a non-chosen starter line whose level is already above a threshold at catch time is silently pre-evolved on creation (`partyMemberFromParticipant`) — no reveal animation plays, since nothing is visibly transforming — and any partial (battle-damaged) HP is carried forward proportionally against the new form's higher max HP rather than being topped off or left stale against the old max.
+
+When an evolution does happen, a full-screen `EvolutionModal` (`src/screens/components/EvolutionModal.tsx`) plays before the usual `LevelUpModal` stat comparison: the old form holds for a beat ("What? X is evolving!"), a rapid white-flash burst plays while the avatar pulses in scale and the species swaps underneath the flash, then the new form bounces in ("X evolved into Y!") with its new type badges — tap-to-continue is only wired up once the reveal has actually finished, so the transformation can't be skipped mid-flash. This is used from all three level-up entry points (`BattleScreen`'s post-battle XP, `BattleScreen`'s in-battle Kinnie use, `CreatureDetailScreen`'s out-of-battle Kinnie use), taking priority over the `LevelUpModal` whenever both would otherwise show at once.
 
 ### 3.2 Legendaries
 
@@ -393,9 +397,9 @@ Each combatant panel shows a generated `CreatureAvatar` (type-colored token, no 
 lunge/hit/faint/heal/crux-glow/catch-wobble/flee animations plus a hit-flash tint on big hits.
 The Result Screen shows win/lose/caught/fled plus gold and XP earned (and a level-up notice) — still
 no XP *bar* animation or catch-prompt flourish. Move Select shows type +
-name only, no PP (PP isn't modeled in the engine) and no long-press tooltip. The Codex/Party stat and
-move displays surface the same "not recorded yet" gaps flagged in section 3.1 (stage-1/2 starters
-have no authored stat block) rather than inventing numbers.
+name only, no PP (PP isn't modeled in the engine) and no long-press tooltip. Every starter stage now
+has an authored stat block (section 3.1), so the Codex/Party stat displays no longer have a "not
+recorded yet" gap for stage-1/2 starters.
 
 **Shop** (`src/screens/ShopScreen.tsx`) sells Balls and Medicine for gold (`src/data/items.json`'s
 `price` field); Key Items aren't for sale. Gold is earned from both catching and defeating wild

@@ -78,7 +78,10 @@ describe("gameStore", () => {
     it("Kinnie grants +1 level and consumes one, without touching other items", () => {
       useGameStore.setState({ party: [makeMember("a")], inventory: { kinnie: 1 } });
       const result = useGameStore.getState().useItemOnPartyMember("a", "kinnie");
-      expect(result).toEqual({ applied: true, effect: "level_up", newLevel: 51 });
+      expect(result.applied).toBe(true);
+      if (!result.applied || result.effect !== "level_up") throw new Error("expected level_up result");
+      expect(result.member.level).toBe(51);
+      expect(result.evolution).toBeNull();
       expect(useGameStore.getState().party[0].level).toBe(51);
       expect(useGameStore.getState().inventory.kinnie).toBe(0);
     });

@@ -23,6 +23,8 @@ export interface DexEntry {
   flavor?: string;
   signatureMove?: string;
   storyFlagRequired?: string;
+  /** Starter stages only: the level this stage evolves at, or null for a final stage. */
+  evolvesAtLevel?: number | null;
 }
 
 const starters = StartersFileSchema.parse(startersData).starters;
@@ -36,9 +38,9 @@ const starterEntries: DexEntry[] = starters.flatMap((line) =>
     name: stage.name,
     types: stage.types,
     category: "starter" as const,
-    // Only the final stage has an authored stat block (spec 3.1 gap) — stage 1/2 show as unrecorded.
-    stats: stage.stage === 3 ? line.baseStatsFinal : undefined,
+    stats: stage.baseStats,
     signatureMove: stage.stage === 3 ? line.signatureMove : undefined,
+    evolvesAtLevel: stage.evolvesAtLevel,
   }))
 );
 

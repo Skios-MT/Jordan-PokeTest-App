@@ -117,7 +117,16 @@ Bag, `P` opens Party, `M` opens/returns-to the Home menu, and `R` flees a
 battle. Hovering a button for 2+ seconds shows an explanatory tooltip.
 
 Starters begin at level 5; stats scale with level (`src/game/progression.ts`)
-rather than staying flat.
+rather than staying flat. Each starter line evolves twice at fixed level
+thresholds (`src/data/starters.json`'s `evolvesAtLevel`), whether the level-up
+came from battle XP or a Kinnie: species, types, and stats all update, a
+custom nickname survives the transformation (only an un-nicknamed creature's
+display name follows the new species), and a full-screen `EvolutionModal`
+(old form → white-flash burst → new form, bounce-in) plays before the usual
+level-up stat comparison. A wild-caught creature from a non-chosen starter
+line that's already above a threshold at catch time is silently caught
+already evolved — no reveal animation, since there's nothing to visibly
+transform from.
 
 **Creatures**: each biome tile type draws only from its own themed wild
 species pool (`src/game/encounterTable.ts`), not one shared list for the

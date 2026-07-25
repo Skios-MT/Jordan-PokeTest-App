@@ -2,7 +2,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildStarterParticipant, STARTER_STARTING_LEVEL, type StarterLineName } from "../game/creatureFactory";
-import { partyMemberFromParticipant, partyMemberStats, addExperience, applyLevelUp, type PartyMember } from "../game/party";
+import {
+  partyMemberFromParticipant,
+  partyMemberStats,
+  addExperience,
+  applyLevelUp,
+  type PartyMember,
+  type EvolutionReveal,
+} from "../game/party";
 import { defaultStartingInventory, getItem } from "../game/itemsRepo";
 
 const SAVE_KEY = "melita-save";
@@ -17,12 +24,13 @@ export interface ExperienceGainResult {
   leveledUp: boolean;
   newLevel: number;
   levelsGained: number;
+  evolution: EvolutionReveal | null;
 }
 
 export type UseItemResult =
   | { applied: false }
   | { applied: true; effect: "heal"; healedAmount: number }
-  | { applied: true; effect: "level_up"; newLevel: number };
+  | { applied: true; effect: "level_up"; member: PartyMember; evolution: EvolutionReveal | null };
 
 interface GameState {
   playerName: string;
@@ -185,12 +193,12 @@ export const useGameStore = create<GameState>()(
       }
 
       if (item.effect === "level_up") {
-        const leveled = applyLevelUp(member);
+        const { member: leveled, evolution } = applyLevelUp(member);
         set({
           party: party.map((m) => (m.uid === uid ? leveled : m)),
           inventory: { ...inventory, [itemId]: qty - 1 },
         });
-        return { applied: true, effect: "level_up", newLevel: leveled.level };
+        return { applied: true, effect: "level_up", member: leveled, evolution };
       }
 
       return { applied: false };
@@ -199,7 +207,7 @@ export const useGameStore = create<GameState>()(
     bumpPartyMemberLevel: (uid) => {
       const member = get().party.find((m) => m.uid === uid);
       if (!member) return;
-      const leveled = applyLevelUp(member);
+      const { member: leveled } = applyLevelUp(member);
       set((state) => ({ party: state.party.map((m) => (m.uid === uid ? leveled : m)) }));
     },
 

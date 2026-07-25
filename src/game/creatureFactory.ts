@@ -52,15 +52,11 @@ function getStarterLine(line: StarterLineName): StarterLine {
   return found;
 }
 
-/**
- * Builds a battle-ready stage-1 starter at the given level.
- *
- * Note: starters.json (spec 3.1) only defines stats for the final evolution
- * stage, not stage 1 — there's no per-stage stat block in the source data.
- * As a placeholder pending real per-stage numbers, this treats the line's
- * baseStatsFinal as the species' scaling reference rather than inventing
- * new "canon" numbers; progression.ts's effectiveStats() scales it by level.
- */
+/** Builds a battle-ready stage-1 starter at the given level. Levels above the stage's own
+ * evolvesAtLevel are handled separately by party.ts, which silently pre-evolves a freshly-built
+ * PartyMember to whatever stage its level actually warrants (relevant for a caught wild "other
+ * starter line" encounter above the evolution threshold — a starter always begins at
+ * STARTER_STARTING_LEVEL, well below every line's first threshold, so this never applies there). */
 export function buildStarterParticipant(
   line: StarterLineName,
   level: number,
@@ -68,19 +64,56 @@ export function buildStarterParticipant(
 ): BattleParticipant {
   const starterLine = getStarterLine(line);
   const stageOne = starterLine.stages[0];
-  return buildParticipant(
-    instanceId,
-    stageOne.id,
-    stageOne.name,
-    stageOne.types,
-    starterLine.baseStatsFinal,
-    level,
-    STARTER_MOVESETS[line]
-  );
+  return buildParticipant(instanceId, stageOne.id, stageOne.name, stageOne.types, stageOne.baseStats, level, STARTER_MOVESETS[line]);
 }
 
 export function getStarterStageOne(line: StarterLineName) {
   return getStarterLine(line).stages[0];
+}
+
+export interface EvolutionCandidate {
+  nextSpeciesId: string;
+  nextName: string;
+  nextTypes: TypeName[];
+  nextBaseStats: StatBlock;
+}
+
+/** Finds which starter line/stage a speciesId belongs to, if any — non-starter species (every
+ * wild creature, regional variant, and legendary) never evolve, since only starters.json carries
+ * stage/evolvesAtLevel data. */
+function findStarterStage(speciesId: string): { line: StarterLine; stageIndex: number } | null {
+  for (const line of starters) {
+    const stageIndex = line.stages.findIndex((s) => s.id === speciesId);
+    if (stageIndex !== -1) return { line, stageIndex };
+  }
+  return null;
+}
+
+/** The stage's own default display name (used to detect whether a party member has been given a
+ * custom nickname — if its displayName no longer matches this, evolution must not overwrite it). */
+export function defaultDisplayNameForSpecies(speciesId: string): string | null {
+  const found = findStarterStage(speciesId);
+  return found ? found.line.stages[found.stageIndex].name : null;
+}
+
+/** Returns the next evolution stage for a species at the given level, or null if it doesn't
+ * evolve here — a non-starter species, an already-final stage, or a level below the threshold.
+ * Callers should loop this (see party.ts) since a large level jump can cross more than one
+ * threshold at once. */
+export function checkEvolution(speciesId: string, level: number): EvolutionCandidate | null {
+  const found = findStarterStage(speciesId);
+  if (!found) return null;
+  const { line, stageIndex } = found;
+  const currentStage = line.stages[stageIndex];
+  if (currentStage.evolvesAtLevel === null || level < currentStage.evolvesAtLevel) return null;
+  const nextStage = line.stages[stageIndex + 1];
+  if (!nextStage) return null;
+  return {
+    nextSpeciesId: nextStage.id,
+    nextName: nextStage.name,
+    nextTypes: nextStage.types,
+    nextBaseStats: nextStage.baseStats,
+  };
 }
 
 export function otherStarterLines(line: StarterLineName): StarterLineName[] {

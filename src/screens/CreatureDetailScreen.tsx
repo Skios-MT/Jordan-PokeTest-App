@@ -8,7 +8,6 @@ import { getMove } from "../game/movesRepo";
 import { partyMemberStats } from "../game/party";
 import { xpToNextLevel } from "../game/progression";
 import { usableItems } from "../game/itemsRepo";
-import { effectiveStats } from "../game/progression";
 import type { StatBlock } from "../data/schemas";
 import { HpBar } from "./components/HpBar";
 import { TypeBadge } from "./components/TypeBadge";
@@ -17,6 +16,7 @@ import { PrimaryButton } from "./components/PrimaryButton";
 import { ScreenBackground } from "./components/ScreenBackground";
 import { useKeyboardShortcuts } from "./components/useKeyboardShortcuts";
 import { LevelUpModal, type LevelUpRevealData } from "./components/LevelUpModal";
+import { EvolutionModal, type EvolutionRevealData } from "./components/EvolutionModal";
 import { colors } from "./theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CreatureDetail">;
@@ -58,6 +58,7 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
   const [showItems, setShowItems] = useState(false);
   const [itemFeedback, setItemFeedback] = useState<string | null>(null);
   const [levelUpReveal, setLevelUpReveal] = useState<LevelUpRevealData | null>(null);
+  const [evolutionReveal, setEvolutionReveal] = useState<EvolutionRevealData | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
@@ -114,15 +115,21 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
     if (result.effect === "heal") {
       setItemFeedback(`${partyMember.displayName} used ${itemName} and recovered ${result.healedAmount} HP!`);
     } else {
-      setItemFeedback(`${partyMember.displayName} drank ${itemName} and grew to level ${result.newLevel}!`);
+      const leveled = result.member;
+      if (result.evolution) {
+        setItemFeedback(`${result.evolution.oldDisplayName} evolved into ${result.evolution.newDisplayName}!`);
+        setEvolutionReveal(result.evolution);
+      } else {
+        setItemFeedback(`${partyMember.displayName} drank ${itemName} and grew to level ${leveled.level}!`);
+      }
       setLevelUpReveal({
-        speciesId: partyMember.speciesId,
-        types: partyMember.types,
-        displayName: partyMember.displayName,
+        speciesId: leveled.speciesId,
+        types: leveled.types,
+        displayName: leveled.displayName,
         oldLevel,
-        newLevel: result.newLevel,
+        newLevel: leveled.level,
         oldStats,
-        newStats: effectiveStats(partyMember.baseStats, result.newLevel),
+        newStats: partyMemberStats(leveled),
       });
     }
   }
@@ -297,7 +304,11 @@ export function CreatureDetailScreen({ route, navigation }: Props) {
         </View>
       </Modal>
 
-      {levelUpReveal && <LevelUpModal data={levelUpReveal} onDismiss={() => setLevelUpReveal(null)} />}
+      {evolutionReveal ? (
+        <EvolutionModal data={evolutionReveal} onDismiss={() => setEvolutionReveal(null)} />
+      ) : (
+        levelUpReveal && <LevelUpModal data={levelUpReveal} onDismiss={() => setLevelUpReveal(null)} />
+      )}
 
       <PrimaryButton testID="back-button" label="Back" variant="secondary" onPress={() => navigation.goBack()} />
     </ScreenBackground>
