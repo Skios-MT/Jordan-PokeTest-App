@@ -1,0 +1,14 @@
+{
+  "moves": [
+    { "id": "tackle", "name": "Tackle", "type": "Normal", "category": "physical", "power": 40, "accuracy": 100, "basePriority": 0 },
+    { "id": "vine_lash", "name": "Vine Lash", "type": "Grass", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "ember", "name": "Ember", "type": "Fire", "category": "special", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "water_jet", "name": "Water Jet", "type": "Water", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "spark", "name": "Spark", "type": "Electric", "category": "special", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "rock_throw", "name": "Rock Throw", "type": "Rock", "category": "physical", "power": 65, "accuracy": 80, "basePriority": 0 },
+    { "id": "shadow_snap", "name": "Shadow Snap", "type": "Ghost", "category": "special", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "metal_claw", "name": "Metal Claw", "type": "Steel", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "bug_bite", "name": "Bug Bite", "type": "Bug", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 },
+    { "id": "sand_blast", "name": "Sand Blast", "type": "Ground", "category": "physical", "power": 55, "accuracy": 90, "basePriority": 0 }
+  ]
+}

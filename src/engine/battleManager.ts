@@ -1,0 +1,300 @@
+import type { BattleAction, BattleContext, Creature, Move } from "./types";
+import { calculateDamage, BASE_CRIT_CHANCE } from "./damage";
+import { sortByPriority, effectivePriority, type OrderedAction } from "./priority";
+import { activateCruxAura, getCruxStatMultiplier, isImmuneToFlinchViaCrux } from "./cruxAura";
+import { tickStatusEffects } from "./statusEffects";
+import { stageMultiplier } from "./statStages";
+
+export type BattleState =
+  | "IDLE"
+  | "BATTLE_INIT"
+  | "TURN_START"
+  | "ACTION_SELECT"
+  | "PRIORITY_SORT"
+  | "ACTION_RESOLVE"
+  | "END_OF_TURN"
+  | "WIN_CHECK"
+  | "BATTLE_END";
+
+export type Winner = "player" | "enemy" | null;
+
+export type BattleStateListener = (state: BattleState, ctx: BattleContext) => void;
+
+export type MoveResolver = (moveId: string) => Move;
+
+/** Placeholder DOT fraction: the spec's state diagram calls for burn/poison ticks but
+ * doesn't pin an exact fraction — 1/16 max HP matches genre convention pending a balance pass. */
+const STATUS_DOT_FRACTION = 1 / 16;
+const PARALYSIS_FULL_STOP_CHANCE = 0.25;
+
+function actorFor(ctx: BattleContext, actorId: string): Creature {
+  return ctx.playerActive.id === actorId ? ctx.playerActive : ctx.enemyActive;
+}
+
+function opponentOf(ctx: BattleContext, actor: Creature): Creature {
+  return ctx.playerActive.id === actor.id ? ctx.enemyActive : ctx.playerActive;
+}
+
+function applyStatusDot(creature: Creature): number {
+  if (creature.status !== "burn" && creature.status !== "poison") return 0;
+  const dmg = Math.max(1, Math.floor(creature.stats.hp * STATUS_DOT_FRACTION));
+  creature.currentHp = Math.max(0, creature.currentHp - dmg);
+  return dmg;
+}
+
+export function canAct(actor: Creature, randomSource: () => number = Math.random): boolean {
+  if (actor.status === "sleep" || actor.status === "freeze") return false;
+  if (actor.flinched) {
+    actor.flinched = false; // flinch only blocks the one action it was applied for
+    return false;
+  }
+  if (actor.status === "paralysis" && randomSource() < PARALYSIS_FULL_STOP_CHANCE) return false;
+  return true;
+}
+
+export function applyFlinch(target: Creature): void {
+  if (isImmuneToFlinchViaCrux(target)) return;
+  target.flinched = true;
+}
+
+/**
+ * Chance a move connects, matching genre convention: accuracy is a percentage
+ * modified by the attacker's accuracy stage and the defender's evasion stage.
+ * A move with accuracy >= 100 is treated as a certain hit and never rolls —
+ * this isn't just an optimization, it keeps a deterministic randomSource
+ * (as used throughout the test suite) from ever "missing" a 100%-accuracy
+ * move on an unlucky boundary roll.
+ */
+export function rollHit(actor: Creature, target: Creature, move: Move, randomSource: () => number): boolean {
+  if (move.accuracy >= 100) return true;
+  const accuracyMultiplier = stageMultiplier(actor.statStages.accuracy) / stageMultiplier(target.statStages.evasion);
+  const hitChance = Math.min(1, Math.max(0, (move.accuracy / 100) * accuracyMultiplier));
+  return randomSource() < hitChance;
+}
+
+/** Per-action result, surfaced to callers (e.g. submitActions' onActionResolved) so the UI
+ * can report exactly what happened — hit/miss, damage dealt, crit — without re-deriving it
+ * from before/after HP snapshots. */
+export interface ActionOutcome {
+  action: BattleAction;
+  actor: Creature;
+  target?: Creature;
+  /** False only for a move that missed or an actor that couldn't act (asleep/frozen/flinched/paralyzed). */
+  hit: boolean;
+  damage: number;
+  crit: boolean;
+}
+
+function nonMoveOutcome(action: BattleAction, actor: Creature, hit: boolean): ActionOutcome {
+  return { action, actor, hit, damage: 0, crit: false };
+}
+
+/**
+ * Resolves a single actor's action against the current context. Mirrors the
+ * spec 5.3 boilerplate's resolveTurn loop body, but as a standalone function
+ * so it can be unit tested per-action rather than only via the full FSM.
+ */
+export function resolveAction(
+  ctx: BattleContext,
+  action: BattleAction,
+  getMove: MoveResolver,
+  randomSource: () => number = Math.random
+): ActionOutcome {
+  const actor = actorFor(ctx, action.actorId);
+
+  if (action.kind === "invoke_crux") {
+    activateCruxAura(actor);
+    return nonMoveOutcome(action, actor, true);
+  }
+
+  if (!canAct(actor, randomSource)) {
+    return nonMoveOutcome(action, actor, false);
+  }
+
+  if (action.kind === "move") {
+    const target = opponentOf(ctx, actor);
+    const move = getMove(action.moveId);
+
+    if (!rollHit(actor, target, move, randomSource)) {
+      return { action, actor, target, hit: false, damage: 0, crit: false };
+    }
+
+    const cruxAuraMultiplier = getCruxStatMultiplier(actor, move.category === "special" ? "spatk" : "atk");
+    const isCrit = randomSource() < BASE_CRIT_CHANCE;
+    const dmg = calculateDamage(actor, target, move, {
+      cruxAuraMultiplier,
+      isCrit,
+      randomFactor: 0.85 + randomSource() * 0.15,
+    });
+    target.currentHp = Math.max(0, target.currentHp - dmg);
+    if (move.statusEffect && move.statusEffect !== "none" && target.status === "none") {
+      target.status = move.statusEffect;
+    }
+    return { action, actor, target, hit: true, damage: dmg, crit: isCrit };
+  }
+
+  // switch / item / flee: same pattern (mutate ctx accordingly) — omitted, no battle-engine
+  // math involved beyond what's already covered by tests for move resolution.
+  return nonMoveOutcome(action, actor, true);
+}
+
+export function tickEndOfTurn(ctx: BattleContext): void {
+  for (const creature of [ctx.playerActive, ctx.enemyActive]) {
+    tickStatusEffects(creature);
+    applyStatusDot(creature);
+  }
+  for (const key of Object.keys(ctx.fieldEffects)) {
+    ctx.fieldEffects[key] = Math.max(0, ctx.fieldEffects[key] - 1);
+    if (ctx.fieldEffects[key] === 0) delete ctx.fieldEffects[key];
+  }
+}
+
+export function checkWin(ctx: BattleContext): Winner {
+  if (ctx.enemyActive.currentHp <= 0) return "player";
+  if (ctx.playerActive.currentHp <= 0) return "enemy";
+  return null;
+}
+
+/**
+ * One full ACTION_RESOLVE + END_OF_TURN pass for two submitted actions,
+ * matching the spec 5.3 `resolveTurn` boilerplate's signature and intent.
+ */
+export function resolveTurn(
+  ctx: BattleContext,
+  playerAction: BattleAction,
+  enemyAction: BattleAction,
+  getMove: MoveResolver,
+  randomSource: () => number = Math.random
+): BattleContext {
+  const ordered: OrderedAction[] = sortByPriority(
+    [playerAction, enemyAction].map((action) => ({
+      action,
+      actor: actorFor(ctx, action.actorId),
+      priority: effectivePriority(action, action.kind === "move" ? getMove(action.moveId).basePriority : 0),
+    })),
+    randomSource
+  );
+
+  for (const entry of ordered) {
+    if (checkWin(ctx)) break;
+    resolveAction(ctx, entry.action, getMove, randomSource);
+  }
+
+  tickEndOfTurn(ctx);
+  ctx.turnCount += 1;
+  return ctx;
+}
+
+export class BattleStateMachine {
+  private state: BattleState = "IDLE";
+  private listeners: BattleStateListener[] = [];
+
+  constructor(private ctx: BattleContext, private getMove: MoveResolver, private randomSource: () => number = Math.random) {}
+
+  getState(): BattleState {
+    return this.state;
+  }
+
+  getContext(): BattleContext {
+    return this.ctx;
+  }
+
+  onStateChange(listener: BattleStateListener): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  private setState(next: BattleState): void {
+    this.state = next;
+    for (const listener of this.listeners) listener(next, this.ctx);
+  }
+
+  /** IDLE -> BATTLE_INIT -> TURN_START -> ACTION_SELECT */
+  start(): void {
+    if (this.state !== "IDLE") throw new Error(`Cannot start battle from state ${this.state}`);
+    this.setState("BATTLE_INIT");
+    this.setState("TURN_START");
+    this.setState("ACTION_SELECT");
+  }
+
+  /**
+   * ACTION_SELECT -> PRIORITY_SORT -> ACTION_RESOLVE -> END_OF_TURN -> WIN_CHECK -> (TURN_START | BATTLE_END)
+   *
+   * `onActionResolved`, if given, fires synchronously once per action actually
+   * resolved, in true speed/priority order — exactly one call if the first
+   * actor's move ends the battle (the second actor never gets to act, same as
+   * the real games), otherwise two. This is the authoritative source for "who
+   * went first and what happened," so callers (the Battle UI) don't need to
+   * separately guess at turn order to reveal it.
+   */
+  submitActions(
+    playerAction: BattleAction,
+    enemyAction: BattleAction,
+    onActionResolved?: (outcome: ActionOutcome) => void
+  ): Winner {
+    if (this.state !== "ACTION_SELECT") {
+      throw new Error(`Cannot submit actions from state ${this.state}`);
+    }
+
+    this.setState("PRIORITY_SORT");
+    const ordered = sortByPriority(
+      [playerAction, enemyAction].map((action) => ({
+        action,
+        actor: actorFor(this.ctx, action.actorId),
+        priority: effectivePriority(
+          action,
+          action.kind === "move" ? this.getMove(action.moveId).basePriority : 0
+        ),
+      })),
+      this.randomSource
+    );
+
+    this.setState("ACTION_RESOLVE");
+    for (const entry of ordered) {
+      if (checkWin(this.ctx)) break;
+      const outcome = resolveAction(this.ctx, entry.action, this.getMove, this.randomSource);
+      onActionResolved?.(outcome);
+    }
+
+    this.setState("END_OF_TURN");
+    tickEndOfTurn(this.ctx);
+
+    this.setState("WIN_CHECK");
+    this.ctx.turnCount += 1;
+    const winner = checkWin(this.ctx);
+
+    if (winner) {
+      this.setState("BATTLE_END");
+    } else {
+      this.setState("TURN_START");
+      this.setState("ACTION_SELECT");
+    }
+    return winner;
+  }
+
+  /**
+   * Swaps in a party reserve as the player's active combatant. The engine
+   * only ever models two active combatants — it has no concept of a bench —
+   * so bringing in a reserve is this thin hook, called by the trainer-battle
+   * layer that actually owns the party array.
+   *
+   * Two calling patterns:
+   *  - Voluntary mid-battle switch: call this, then still call
+   *    `submitActions` with a `{ kind: "switch" }` player action (a no-op in
+   *    resolveAction) so the enemy's action resolves against the new
+   *    creature and the switch costs the turn, matching genre convention.
+   *  - Forced switch after a faint: call this alone. If the previous active
+   *    creature's faint was the only reason the battle just ended, and the
+   *    replacement has HP and the opponent is still standing, this un-ends
+   *    the battle back to ACTION_SELECT — a forced switch costs no turn.
+   */
+  replacePlayerActive(creature: Creature): void {
+    this.ctx.playerActive = creature;
+    if (this.state === "BATTLE_END" && creature.currentHp > 0 && this.ctx.enemyActive.currentHp > 0) {
+      this.setState("TURN_START");
+      this.setState("ACTION_SELECT");
+    }
+  }
+}

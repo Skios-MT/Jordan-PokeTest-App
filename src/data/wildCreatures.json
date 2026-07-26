@@ -1,0 +1,148 @@
+{
+  "wildCreatures": [
+    {
+      "id": "fossary",
+      "name": "Fossary",
+      "types": ["Bug", "Grass"],
+      "flavor": "A garrigue-shell beetle that grazes the Buskett scrubland; the ridges on its back are said to mirror the megaliths.",
+      "baseStats": { "hp": 70, "atk": 75, "def": 80, "spatk": 55, "spdef": 70, "speed": 65 },
+      "moveIds": ["bug_bite", "vine_lash", "tackle"],
+      "biome": "grass"
+    },
+    {
+      "id": "qortong",
+      "name": "Qortong",
+      "types": ["Rock"],
+      "flavor": "A fist-sized nodule of hardened globigerina limestone that shuffles across quarry floors.",
+      "baseStats": { "hp": 60, "atk": 65, "def": 95, "spatk": 30, "spdef": 60, "speed": 25 },
+      "moveIds": ["rock_throw", "tackle"],
+      "biome": "rock"
+    },
+    {
+      "id": "xrobbog",
+      "name": "Xrobbog",
+      "types": ["Rock", "Ground"],
+      "flavor": "Nests in the loose scree below the cliffs; a stomp triggers a small rockslide it rides downhill.",
+      "baseStats": { "hp": 70, "atk": 85, "def": 75, "spatk": 35, "spdef": 50, "speed": 65 },
+      "moveIds": ["rock_throw", "sand_blast", "tackle"],
+      "biome": "rock"
+    },
+    {
+      "id": "karkarun",
+      "name": "Karkarun",
+      "types": ["Rock"],
+      "flavor": "Mistaken for an ordinary standing stone until it turns to face you; the old megaliths are said to count visitors.",
+      "baseStats": { "hp": 85, "atk": 90, "def": 110, "spatk": 40, "spdef": 70, "speed": 30 },
+      "moveIds": ["rock_throw", "tackle"],
+      "biome": "rock"
+    },
+    {
+      "id": "bulqajra",
+      "name": "Bulqajra",
+      "types": ["Rock", "Fighting"],
+      "flavor": "Rolls itself into a boulder to travel, then unfurls two stone fists the moment it stops.",
+      "baseStats": { "hp": 80, "atk": 105, "def": 85, "spatk": 30, "spdef": 55, "speed": 45 },
+      "moveIds": ["rock_throw", "tackle"],
+      "biome": "rock"
+    },
+    {
+      "id": "santwarr",
+      "name": "Santwarr",
+      "types": ["Rock", "Psychic"],
+      "flavor": "Said to wake only when the solstice light lines up with the temple's inner chamber, same as the old stones themselves.",
+      "baseStats": { "hp": 90, "atk": 80, "def": 100, "spatk": 75, "spdef": 85, "speed": 40 },
+      "moveIds": ["rock_throw", "tackle"],
+      "biome": "rock"
+    },
+    {
+      "id": "luzzitt",
+      "name": "Luzzitt",
+      "types": ["Water"],
+      "flavor": "A silver harbour-fish that leaps in the wake of the luzzu boats, chasing scraps thrown from the stern.",
+      "baseStats": { "hp": 65, "atk": 55, "def": 50, "spatk": 70, "spdef": 55, "speed": 70 },
+      "moveIds": ["water_jet", "tackle"],
+      "biome": "water"
+    },
+    {
+      "id": "marsupp",
+      "name": "Marsupp",
+      "types": ["Water"],
+      "flavor": "Clings to anchor chains and old mooring ropes; fishermen have to pry it loose before it eats through the line.",
+      "baseStats": { "hp": 75, "atk": 60, "def": 80, "spatk": 50, "spdef": 70, "speed": 40 },
+      "moveIds": ["water_jet", "tackle"],
+      "biome": "water"
+    },
+    {
+      "id": "kalanka",
+      "name": "Kalanka",
+      "types": ["Water", "Rock"],
+      "flavor": "Lives on the coral-crusted reef shelves off the coast, its shell indistinguishable from the rock until it moves.",
+      "baseStats": { "hp": 80, "atk": 70, "def": 85, "spatk": 60, "spdef": 75, "speed": 35 },
+      "moveIds": ["water_jet", "rock_throw", "tackle"],
+      "biome": "water"
+    },
+    {
+      "id": "vurjenn",
+      "name": "Vurjenn",
+      "types": ["Water", "Flying"],
+      "flavor": "Dives from the cliffs into open water after schools of fish, surfacing almost a hundred metres from where it entered.",
+      "baseStats": { "hp": 70, "atk": 75, "def": 55, "spatk": 65, "spdef": 55, "speed": 95 },
+      "moveIds": ["water_jet", "tackle"],
+      "biome": "water"
+    },
+    {
+      "id": "ondallus",
+      "name": "Ondallus",
+      "types": ["Water", "Dragon"],
+      "flavor": "Old fishermen blame the strong currents off the outer rock on this creature turning over in its sleep far below.",
+      "baseStats": { "hp": 95, "atk": 90, "def": 75, "spatk": 95, "spdef": 80, "speed": 60 },
+      "moveIds": ["water_jet", "tackle"],
+      "biome": "water"
+    },
+    {
+      "id": "ramliet",
+      "name": "Ramliet",
+      "types": ["Ground"],
+      "flavor": "Burrows sideways through the fine red sand of the dunes, leaving trails that vanish with the next gust.",
+      "baseStats": { "hp": 60, "atk": 70, "def": 65, "spatk": 35, "spdef": 50, "speed": 60 },
+      "moveIds": ["sand_blast", "tackle"],
+      "biome": "sand"
+    },
+    {
+      "id": "xemxun",
+      "name": "Xemxun",
+      "types": ["Ground", "Fire"],
+      "flavor": "Basks on sunbaked dune ridges until its scales are almost too hot to touch, then races off before it burns.",
+      "baseStats": { "hp": 65, "atk": 75, "def": 60, "spatk": 60, "spdef": 50, "speed": 80 },
+      "moveIds": ["sand_blast", "ember", "tackle"],
+      "biome": "sand"
+    },
+    {
+      "id": "dunkorr",
+      "name": "Dunkorr",
+      "types": ["Ground", "Rock"],
+      "flavor": "Formed where wind-blown sand fuses with soft rock over centuries; its footprints outlast most buildings.",
+      "baseStats": { "hp": 90, "atk": 85, "def": 100, "spatk": 30, "spdef": 60, "speed": 25 },
+      "moveIds": ["sand_blast", "rock_throw", "tackle"],
+      "biome": "sand"
+    },
+    {
+      "id": "sirokk",
+      "name": "Sirokk",
+      "types": ["Ground", "Flying"],
+      "flavor": "A miniature sandstorm with eyes, kicked up whenever the real sirocco wind blows in off the sea.",
+      "baseStats": { "hp": 70, "atk": 80, "def": 55, "spatk": 65, "spdef": 55, "speed": 90 },
+      "moveIds": ["sand_blast", "tackle"],
+      "biome": "sand"
+    },
+    {
+      "id": "ossijan",
+      "name": "Ossijan",
+      "types": ["Ground"],
+      "flavor": "Collects sun-bleached bones in its dune burrow; locals say the biggest hoards belong to the oldest ones.",
+      "baseStats": { "hp": 85, "atk": 95, "def": 75, "spatk": 45, "spdef": 65, "speed": 55 },
+      "moveIds": ["sand_blast", "tackle"],
+      "biome": "sand"
+    }
+  ]
+}
