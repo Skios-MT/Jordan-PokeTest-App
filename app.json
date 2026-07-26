@@ -12,6 +12,9 @@
     },
     "android": {
       "package": "com.melita.game"
+    },
+    "experiments": {
+      "baseUrl": "/Jordan-PokeTest-App"
     }
   }
 }
